@@ -1,6 +1,8 @@
 # Cache Files
 data/installed.json
 data/updates.json
+data/downloads.json
+data/ignored.json
 
 # Downloads Directory
 Downloads/
