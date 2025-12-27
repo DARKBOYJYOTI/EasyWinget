@@ -114,5 +114,5 @@ Simply double-click **`start-gui.bat`**.
 ---
 
 <div align="center">
-© 2024 EasyWinGet. Open Source Community.
+© 2025 EasyWinGet. Open Source Community.
 </div>
