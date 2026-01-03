@@ -1677,7 +1677,7 @@ setInterval(() => {
             // Try closing (often blocked unless script opened window)
             window.close();
         });
-}, 500);
+}, 2000);
 
 // INSTANT SHUTDOWN ON TAB CLOSE
 window.addEventListener('beforeunload', () => {

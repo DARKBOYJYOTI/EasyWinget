@@ -16,8 +16,8 @@ app.use(express.json());
 
 // --- HEARTBEAT & AUTO-SHUTDOWN ---
 let lastHeartbeat = Date.now();
-const HEARTBEAT_TIMEOUT = 2000; // 2 seconds (faster shutdown)
-const GRACE_PERIOD = 3000;     // 3 seconds startup grace (faster startup check)
+const HEARTBEAT_TIMEOUT = 30000; // 30 seconds (much more stable)
+const GRACE_PERIOD = 10000;    // 10 seconds startup grace
 
 // Allow client to send keepalive signal
 app.post('/api/keepalive', (req, res) => {
@@ -39,7 +39,7 @@ setTimeout(() => {
             console.log('Client disconnected (timeout). Shutting down...');
             process.exit(0);
         }
-    }, 500); // Check every 0.5s
+    }, 2000); // Check every 2s
 }, GRACE_PERIOD);
 
 // Static Files
