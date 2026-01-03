@@ -10,7 +10,7 @@
 [![Version](https://img.shields.io/badge/version-4.5.0-blue.svg)](https://github.com/DARKBOYJYOTI/EasyWinGet)
 
 <p align="center">
-  <img src="https://via.placeholder.com/800x400?text=EasyWinGet+Preview" alt="EasyWinGet Preview" width="100%">
+  <img src="assets/banner.png" alt="EasyWinGet Preview" width="100%">
 </p>
 
 [Key Features](#-key-features) •
