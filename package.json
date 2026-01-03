@@ -1,0 +1,33 @@
+{
+  "name": "easywinget",
+  "version": "3.1.0",
+  "description": "Modern GUI for Windows Package Manager (WinGet) - Search, install, update and manage applications with ease",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "cors": "file:offline-packages/cors-2.8.5.tgz",
+    "express": "file:offline-packages/express-5.2.1.tgz",
+    "node-pty": "file:offline-packages/node-pty-1.1.0.tgz"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DARKBOYJYOTI/EasyWinGet.git"
+  },
+  "keywords": [
+    "winget",
+    "package-manager",
+    "gui",
+    "windows",
+    "installer"
+  ],
+  "author": "Jyoti Karmakar",
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/DARKBOYJYOTI/EasyWinGet/issues"
+  },
+  "homepage": "https://github.com/DARKBOYJYOTI/EasyWinGet#readme"
+}

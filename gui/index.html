@@ -76,7 +76,8 @@
                     <div class="input-with-clear">
                         <input type="text" id="search-input"
                             placeholder="Search for apps (e.g., Chrome, VSCode, Git)..." autocomplete="off">
-                        <button id="clear-search" class="clear-btn" style="display:none;" title="Clear">×</button>
+                        <button id="clear-search" class="clear-btn" style="display:none;" title="Clear"
+                            aria-label="Clear search input">×</button>
                     </div>
                     <button id="search-btn" class="btn btn-primary">Search</button>
                 </div>
@@ -98,7 +99,7 @@
             <div id="installed-view" class="view" style="display:none;">
                 <header class="view-header">
                     <div>
-                        <h2>Installed Applications</h2>
+                        <h2 id="installed-header-title">Installed Applications</h2>
                         <p>Manage your installed software</p>
                     </div>
                     <div style="display: flex; gap: 12px; align-items: center;">
@@ -106,7 +107,8 @@
                             <option value="name">Sort by Name</option>
                             <option value="name-desc">Sort by Name (Z-A)</option>
                         </select>
-                        <button id="refresh-installed" class="btn-icon" title="Refresh">
+                        <button id="refresh-installed" class="btn-icon" title="Refresh"
+                            aria-label="Refresh installed apps list">
                             <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                 stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -120,10 +122,15 @@
                     <div class="input-with-clear">
                         <input type="text" id="filter-installed" placeholder="Filter installed apps..."
                             autocomplete="off">
-                        <button id="clear-filter-installed" class="clear-btn" style="display:none;"
-                            title="Clear">×</button>
+                        <button id="clear-filter-installed" class="clear-btn" style="display:none;" title="Clear"
+                            aria-label="Clear filter">×</button>
                     </div>
                     <button id="filter-installed-btn" class="btn btn-secondary">Filter</button>
+                </div>
+
+                <div id="installed-loading" class="loading-state" style="display:none;">
+                    <div class="spinner"></div>
+                    <p>Loading installed apps...</p>
                 </div>
 
                 <div id="installed-list" class="list-container"></div>
@@ -133,13 +140,15 @@
             <div id="updates-view" class="view" style="display:none;">
                 <header class="view-header">
                     <div>
-                        <h2>Available Updates</h2>
+                        <h2 id="updates-header-title">Available Updates</h2>
                         <p>Keep your software up to date</p>
                     </div>
                     <div style="display: flex; gap: 12px; align-items: center;">
-                        <button id="view-ignored-btn" class="btn btn-secondary"
-                            style="font-size: 0.8rem; padding: 4px 12px;">Ignored Apps</button>
-                        <button id="refresh-updates" class="btn-icon" title="Check for updates">
+                        <button id="update-all-btn" class="btn btn-primary"
+                            style="font-size: 0.85rem; padding: 8px 16px; display: none;">Update All</button>
+                        <button id="view-ignored-btn" class="btn btn-secondary">Ignored Apps</button>
+                        <button id="refresh-updates" class="btn-icon" title="Check for updates"
+                            aria-label="Check for available updates">
                             <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                 stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -152,10 +161,15 @@
                 <div class="search-container" style="margin-bottom:24px;">
                     <div class="input-with-clear">
                         <input type="text" id="filter-updates" placeholder="Filter updates..." autocomplete="off">
-                        <button id="clear-filter-updates" class="clear-btn" style="display:none;"
-                            title="Clear">×</button>
+                        <button id="clear-filter-updates" class="clear-btn" style="display:none;" title="Clear"
+                            aria-label="Clear filter">×</button>
                     </div>
                     <button id="filter-updates-btn" class="btn btn-secondary">Filter</button>
+                </div>
+
+                <div id="updates-loading" class="loading-state" style="display:none;">
+                    <div class="spinner"></div>
+                    <p>Checking for updates...</p>
                 </div>
 
                 <div id="updates-grid" class="card-grid"></div>
@@ -168,7 +182,8 @@
                         <h2>Downloaded Files</h2>
                         <p>Manage installers in your Downloads folder</p>
                     </div>
-                    <button id="refresh-downloaded" class="btn-icon" title="Refresh">
+                    <button id="refresh-downloaded" class="btn-icon" title="Refresh"
+                        aria-label="Refresh downloaded files list">
                         <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round"
@@ -217,8 +232,9 @@
         <div class="modal-header">
             <h3 id="modal-title">Task Progress</h3>
             <div class="modal-controls">
-                <button id="minimize-modal" class="modal-btn" title="Minimize">−</button>
-                <button id="close-modal" class="modal-btn" title="Close">×</button>
+                <button id="minimize-modal" class="modal-btn" title="Minimize"
+                    aria-label="Minimize task window">−</button>
+                <button id="close-modal" class="modal-btn" title="Close" aria-label="Close task window">×</button>
             </div>
         </div>
         <div class="modal-progress">
@@ -236,7 +252,8 @@
             <div class="modal-header">
                 <h3>Ignored Updates</h3>
                 <div class="modal-controls">
-                    <button id="close-ignored-modal" class="modal-btn" title="Close">×</button>
+                    <button id="close-ignored-modal" class="modal-btn" title="Close"
+                        aria-label="Close ignored apps window">×</button>
                 </div>
             </div>
             <div id="ignored-list" class="modal-output"
@@ -253,11 +270,7 @@
     <!-- Minimized Tasks Tray -->
     <div id="minimized-tray" class="minimized-tray" style="display:none;"></div>
 
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="loading-overlay" style="display:none;">
-        <div class="spinner"></div>
-        <p>Loading...</p>
-    </div>
+
 
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>

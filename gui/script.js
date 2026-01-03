@@ -95,12 +95,39 @@ function getIcon(name) {
     return '📦';
 }
 
+// Toast Singleton - Replaces any existing toast
 function showToast(message, type = 'info') {
+    if (!DOM.toasts) {
+        DOM.toasts = document.getElementById('toast-container');
+        if (!DOM.toasts) return;
+    }
+
+    // SINGLETON: Clear existing toasts
+    DOM.toasts.innerHTML = '';
+
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.innerHTML = `<strong>${message}</strong>`;
+
+    let icon = 'ℹ️';
+    if (type === 'success') icon = '✅';
+    if (type === 'error') icon = '❌';
+
+    toast.innerHTML = `
+        <span class="toast-icon">${icon}</span>
+        <span class="toast-message">${message}</span>
+    `;
+
     DOM.toasts.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+
+    // Auto remove
+    setTimeout(() => {
+        // Fade out
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px) scale(0.95)';
+        setTimeout(() => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 300);
+    }, 3000);
 }
 
 function showLoading() {
@@ -151,11 +178,51 @@ function customConfirm(title, message, icon = '⚠️') {
 // ==========================================
 // TASK MODAL FUNCTIONS
 // ==========================================
+
 function updateTaskLog(task, text, type = 'info') {
     if (!task) return;
 
+    // Hotfix: Replace double-encoded UTF-8 characters if server/cmd messed them up
+    // Γûê is █ (Full Block), ΓûÆ is ▒ (Light Shade) approx
+    text = text.replace(/Γûê/g, '█').replace(/ΓûÆ/g, '▒');
+
+    // Detect progress bar lines (e.g., containing blocks or "1.2 MB / 5.6 MB") or spinner chars
+    const isProgressLine = text.includes('█') || text.includes('▒')
+        || (text.match(/\d+(\.\d+)?\s*(KB|MB|GB)\s*\/\s*\d+(\.\d+)?\s*(KB|MB|GB)/i) && !text.includes('id'))
+        || text.match(/^\s*[\-\\\|\/]\s*$/);
+
     // Add to history
-    task.output.push({ text, type });
+    // If we want to animate, we should replace the last entry if both are progress lines
+    const lastEntry = task.output[task.output.length - 1];
+    const isLastProgress = lastEntry && lastEntry.isProgress;
+
+    if (isProgressLine && isLastProgress) {
+        // Update the last entry's text
+        lastEntry.text = text;
+
+        // UI Update: Update the last DOM element
+        if (State.currentTask === task) {
+            const lastDom = DOM.modal.output.lastElementChild;
+            if (lastDom) {
+                lastDom.textContent = text;
+            }
+        }
+    } else {
+        // Standard append
+        task.output.push({ text, type, isProgress: isProgressLine });
+
+        // UI Update: Append new element
+        if (State.currentTask === task) {
+            const line = document.createElement('div');
+            line.className = `output-line ${type}`;
+            // If it's a progress line, give it a monospaced look or special class if desired
+            if (isProgressLine) line.style.fontFamily = 'Consolas, monospace';
+            // Add $ prefix for terminal look
+            line.textContent = '$ ' + text;
+            DOM.modal.output.appendChild(line);
+            DOM.modal.output.scrollTop = DOM.modal.output.scrollHeight;
+        }
+    }
 
     // Update progress based on text
     // Update progress based on text (only if not already complete/error)
@@ -167,12 +234,12 @@ function updateTaskLog(task, text, type = 'info') {
             task.progress = 30; task.stage = 'search';
         } else if (lower.includes('downloading') || lower.includes('download')) {
             task.progress = 50; task.stage = 'download';
-        } else if (lower.includes('installing') || lower.includes('install')) {
+        } else if (lower.includes('uninstalling') || lower.includes('removing') || lower.includes('uninstall')) {
+            task.progress = 70; task.stage = 'uninstall';
+        } else if ((lower.includes('installing') || lower.includes('install')) && !lower.includes('uninstall')) {
             task.progress = 70; task.stage = 'install';
         } else if (lower.includes('upgrading') || lower.includes('update')) {
             task.progress = 70; task.stage = 'update';
-        } else if (lower.includes('uninstalling') || lower.includes('removing')) {
-            task.progress = 70; task.stage = 'uninstall';
         } else if (lower.includes('verifying') || lower.includes('configuring')) {
             task.progress = 85; task.stage = 'verify';
         }
@@ -184,33 +251,30 @@ function updateTaskLog(task, text, type = 'info') {
         task.progress = 100; task.stage = 'error';
     }
 
-    // Update UI only if this is the currently visible task
+    // Update progress bar UI (always, in case stage changed)
     if (State.currentTask === task) {
-        // Append log
-        const line = document.createElement('div');
-        line.className = `output-line ${type}`;
-        line.textContent = text;
-        DOM.modal.output.appendChild(line);
-        DOM.modal.output.scrollTop = DOM.modal.output.scrollHeight;
-
-        // Update progress bar
         const progressBar = document.getElementById('progress-bar');
         const progressText = document.getElementById('progress-text');
 
-        let statusText = text;
-        if (task.stage === 'init') statusText = 'Preparing...';
-        if (task.stage === 'search') statusText = 'Searching...';
-        if (task.stage === 'download') statusText = 'Downloading...';
-        if (task.stage === 'install') statusText = 'Installing...';
-        if (task.stage === 'update') statusText = 'Updating...';
-        if (task.stage === 'uninstall') statusText = 'Uninstalling...';
-        if (task.stage === 'complete') statusText = 'Completed!';
-        if (task.stage === 'error') statusText = 'Failed';
+        if (progressBar && progressText) {
+            let statusText = text;
+            if (isProgressLine) statusText = "Downloading..."; // Simplify text on the bar itself if it's a complex progress line
 
-        progressBar.style.width = task.progress + '%';
-        progressText.textContent = statusText;
+            if (task.stage === 'init') statusText = 'Preparing...';
+            if (task.stage === 'search') statusText = 'Searching...';
+            if (task.stage === 'download') statusText = 'Downloading...';
+            if (task.stage === 'install') statusText = 'Installing...';
+            if (task.stage === 'update') statusText = 'Updating...';
+            if (task.stage === 'uninstall') statusText = 'Uninstalling...';
+            if (task.stage === 'complete') statusText = 'Completed!';
+            if (task.stage === 'error') statusText = 'Failed';
+
+            progressBar.style.width = task.progress + '%';
+            progressText.textContent = statusText;
+        }
     }
 }
+
 
 function showTaskModal(title, appId) {
     DOM.modal.title.textContent = title;
@@ -223,7 +287,8 @@ function showTaskModal(title, appId) {
         appId,
         output: [],
         progress: 0,
-        stage: 'init'
+        stage: 'init',
+        processedLines: 0 // Track processed log lines
     };
 
     State.currentTask = newTask;
@@ -387,6 +452,92 @@ async function searchApps(query) {
 }
 
 // ==========================================
+// POLLING HELPER
+// ==========================================
+async function pollJob(jobId, task, successMsg, failMsg, onSuccess) {
+    if (!jobId || !task) return;
+
+    let errorCount = 0;
+
+    const checkStatus = async () => {
+        try {
+            const data = await apiCall(`/api/status?id=${jobId}`);
+
+            if (!data) {
+                errorCount++;
+                if (errorCount > 5) {
+                    updateTaskLog(task, 'Lost connection to task.', 'error');
+                    return; // Stop polling
+                }
+            } else {
+                errorCount = 0; // Reset error count on success
+
+                // Process new output lines
+                if (data.output) {
+                    // Split by any CR/LF to handle winget's animation updates which use \r
+                    const allLines = data.output.split(/[\r\n]+/);
+
+                    // Only take new lines
+                    const newLines = allLines.slice(task.processedLines || 0);
+                    task.processedLines = allLines.length; // Update pointer immediately
+
+                    // Process lines with visual delay to smooth out animations
+                    // We await this so next poll doesn't happen until we finish animating this batch
+                    if (newLines.length > 0) {
+                        await processLogLinesWithDelay(task, newLines);
+                    }
+                }
+
+                if (data.done) {
+                    if (data.success) {
+                        updateTaskLog(task, '✓ Task Completed!', 'success');
+                        showToast(successMsg, 'success');
+                        if (onSuccess) onSuccess();
+                    } else {
+                        updateTaskLog(task, '✗ Task Failed', 'error');
+                        updateTaskLog(task, 'Check logs for details.', 'error');
+                        showToast(failMsg, 'error');
+                    }
+                    return; // Stop polling
+                }
+            }
+        } catch (e) {
+            log('Polling error', e);
+        }
+
+        // Schedule next poll
+        // Poll once per second instead of spam
+        setTimeout(checkStatus, 200);
+    };
+
+    // Start the loop
+    checkStatus();
+}
+
+async function processLogLinesWithDelay(task, lines) {
+    console.log(`[Animation] Processing ${lines.length} lines`);
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // Check if it's a progress/spinner line
+        const isProgress = trimmed.includes('█') || trimmed.includes('▒') || trimmed.match(/[\-\\\|\/]/) || trimmed.match(/\d+(\.\d+)?\s*(KB|MB|GB)\s*\/\s*\d+(\.\d+)?\s*(KB|MB|GB)/i);
+
+        updateTaskLog(task, trimmed, 'info');
+
+        // Add delay for progress lines so user can SEE each update
+        // 100ms = smooth animation, 10ms for regular text
+        if (isProgress && i < lines.length - 1) {
+            await new Promise(r => setTimeout(r, 100));
+        } else if (!isProgress && i < lines.length - 1) {
+            await new Promise(r => setTimeout(r, 10));
+        }
+    }
+}
+
+// ==========================================
 // TASK FUNCTIONS WITH MODAL
 // ==========================================
 // ==========================================
@@ -405,18 +556,20 @@ window.confirmInstall = async function (id, name) {
         // Capture the task object!
         const task = showTaskModal(`Installing ${safeName}`, id);
         updateTaskLog(task, `Package ID: ${id}`, 'info');
-        updateTaskLog(task, `Running: winget install ${id}...`, 'info');
+        updateTaskLog(task, `Requesting install...`, 'info');
 
         fetch(`/api/install?id=${encodeURIComponent(id)}`)
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
-                    updateTaskLog(task, '✓ Installation completed successfully!', 'success');
-                    showToast(`${safeName} installed successfully!`, 'success');
+                if (data.success && data.jobId) {
+                    updateTaskLog(task, '✓ Request accepted. Starting background job...', 'info');
+                    pollJob(data.jobId, task, `${safeName} installed successfully!`, `Failed by install ${safeName}`, () => {
+                        fetchInstalled(true);
+                    });
                 } else {
-                    updateTaskLog(task, '✗ Installation failed', 'error');
-                    updateTaskLog(task, data.message || 'Unknown error', 'error');
-                    showToast(`Failed to install ${safeName}`, 'error');
+                    updateTaskLog(task, '✗ Installation request failed', 'error');
+                    if (data.message) updateTaskLog(task, data.message, 'error');
+                    if (data.error) updateTaskLog(task, "Server Error: " + data.error, 'error');
                 }
             })
             .catch(err => {
@@ -438,20 +591,19 @@ window.confirmDownload = async function (id, name) {
         showToast(`Downloading ${safeName}...`, 'info');
         const task = showTaskModal(`Downloading ${safeName}`, id);
         updateTaskLog(task, `Package ID: ${id}`, 'info');
-        updateTaskLog(task, `Downloading installer...`, 'info');
+        updateTaskLog(task, `Requesting download...`, 'info');
 
-        fetch(`/api/download?id=${encodeURIComponent(id)}`)
+        fetch(`/api/download?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`)
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
-                    updateTaskLog(task, '✓ Download completed!', 'success');
-                    updateTaskLog(task, `Saved to: Downloads/${id}.exe`, 'info');
-                    showToast(`${safeName} downloaded successfully!`, 'success');
-                    // Refresh downloads list to update badge
-                    loadDownloaded(true);
+                if (data.success && data.jobId) {
+                    pollJob(data.jobId, task, `${safeName} downloaded!`, `Failed to download ${safeName}`, () => {
+                        loadDownloaded(true);
+                    });
                 } else {
-                    updateTaskLog(task, '✗ Download failed', 'error');
-                    showToast(`Failed to download ${safeName}`, 'error');
+                    updateTaskLog(task, '✗ Download request failed', 'error');
+                    if (data.message) updateTaskLog(task, data.message, 'error');
+                    if (data.error) updateTaskLog(task, "Server Error: " + data.error, 'error');
                 }
             });
     }
@@ -469,18 +621,19 @@ window.confirmUninstall = async function (id, name) {
         showToast(`Uninstalling ${safeName}...`, 'info');
         const task = showTaskModal(`Uninstalling ${safeName}`, id);
         updateTaskLog(task, `Package ID: ${id}`, 'info');
-        updateTaskLog(task, `Running: winget uninstall ${id}...`, 'info');
+        updateTaskLog(task, `Requesting uninstall...`, 'info');
 
-        fetch(`/api/uninstall?id=${encodeURIComponent(id)}`)
+        fetch(`/api/uninstall?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`)
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
-                    updateTaskLog(task, '✓ Uninstallation completed!', 'success');
-                    showToast(`${safeName} uninstalled successfully!`, 'success');
-                    loadInstalled(true);
+                if (data.success && data.jobId) { // Check for jobId
+                    pollJob(data.jobId, task, `${safeName} uninstalled!`, `Failed to uninstall ${safeName}`, () => {
+                        loadInstalled(true);
+                    });
                 } else {
-                    updateTaskLog(task, '✗ Uninstallation failed', 'error');
-                    showToast(`Failed to uninstall ${safeName}`, 'error');
+                    updateTaskLog(task, '✗ Uninstall request failed', 'error');
+                    if (data.message) updateTaskLog(task, data.message, 'error');
+                    if (data.error) updateTaskLog(task, "Server Error: " + data.error, 'error');
                 }
             });
     }
@@ -498,18 +651,19 @@ window.confirmUpdate = async function (id, name) {
         showToast(`Updating ${safeName}...`, 'info');
         const task = showTaskModal(`Updating ${safeName}`, id);
         updateTaskLog(task, `Package ID: ${id}`, 'info');
-        updateTaskLog(task, `Running: winget upgrade ${id}...`, 'info');
+        updateTaskLog(task, `Requesting update...`, 'info');
 
         fetch(`/api/update?id=${encodeURIComponent(id)}`)
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
-                    updateTaskLog(task, '✓ Update completed!', 'success');
-                    showToast(`${safeName} updated successfully!`, 'success');
-                    loadUpdates(true);
+                if (data.success && data.jobId) {
+                    pollJob(data.jobId, task, `${safeName} updated!`, `Failed to update ${safeName}`, () => {
+                        loadUpdates(true);
+                    });
                 } else {
-                    updateTaskLog(task, '✗ Update failed', 'error');
-                    showToast(`Failed to update ${safeName}`, 'error');
+                    updateTaskLog(task, '✗ Update request failed', 'error');
+                    if (data.message) updateTaskLog(task, data.message, 'error');
+                    if (data.error) updateTaskLog(task, "Server Error: " + data.error, 'error');
                 }
             });
     }
@@ -563,7 +717,12 @@ function renderSearchResults(results) {
         <div class="app-card">
             <span class="icon">${getIcon(app.name)}</span>
             <h3>${app.name}</h3>
-            <div class="app-id">${app.id}</div>
+            <div 
+                class="app-id" 
+                title="Click to copy ID" 
+                style="cursor: pointer;" 
+                onclick="copyToClipboard('${app.id}')"
+            >${app.id}</div>
             <div class="version">v${app.version || 'Unknown'}</div>
             <div class="actions">
                 ${actionButtons}
@@ -587,6 +746,9 @@ function renderInstalledApps(apps, filter = '') {
         return;
     }
 
+    const headerTitle = document.getElementById('installed-header-title');
+    if (headerTitle) headerTitle.textContent = `Installed Applications (${validApps.length})`;
+
     const filtered = filter ? validApps.filter(app =>
         (app.name && app.name.toLowerCase().includes(filter.toLowerCase())) ||
         (app.id && app.id.toLowerCase().includes(filter.toLowerCase()))
@@ -602,7 +764,11 @@ function renderInstalledApps(apps, filter = '') {
             <span class="icon">${getIcon(app.name)}</span>
             <div class="info">
                 <h3>${app.name}</h3>
-                <p>${app.id} • v${app.version || '?'}</p>
+                <p 
+                    title="Click to copy ID" 
+                    style="cursor: pointer; display: inline-block;" 
+                    onclick="copyToClipboard('${app.id}')"
+                >${app.id} • v${app.version || '?'}</p>
             </div>
             <button class="btn btn-danger" onclick="confirmUninstall('${app.id}', '${app.name}')">Uninstall</button>
         </div>
@@ -625,6 +791,9 @@ function renderUpdates(updates, filter = '') {
         return;
     }
 
+    const headerTitle = document.getElementById('updates-header-title');
+    if (headerTitle) headerTitle.textContent = `Available Updates (${validUpdates.length})`;
+
     const filtered = filter ? validUpdates.filter(app =>
         (app.name && app.name.toLowerCase().includes(filter.toLowerCase())) ||
         (app.id && app.id.toLowerCase().includes(filter.toLowerCase()))
@@ -639,7 +808,12 @@ function renderUpdates(updates, filter = '') {
         <div class="app-card">
             <span class="icon">${getIcon(app.name)}</span>
             <h3>${app.name}</h3>
-            <div class="app-id">${app.id}</div>
+            <div 
+                class="app-id" 
+                title="Click to copy ID" 
+                style="cursor: pointer;" 
+                onclick="copyToClipboard('${app.id}')"
+            >${app.id}</div>
             <div class="version">
                 v${app.version || 'Unknown'}
                 ${app.current ? `<br><small style="color:var(--text-secondary)">Current: ${app.current}</small>` : ''}
@@ -730,55 +904,75 @@ window.closeIgnoredModal = function () {
 function renderDownloaded(files) {
     const container = document.getElementById('downloaded-list');
     const empty = document.getElementById('downloaded-empty');
-    if (!container) return;
+    const badge = document.getElementById('downloaded-badge');
 
-    if (!files || (Array.isArray(files) && files.length === 0)) {
-        container.innerHTML = '';
-        if (empty) empty.style.display = 'block';
+    // Validate files array
+    const validFiles = files && Array.isArray(files) ? files : [];
+
+    // -----------------------------------------------------
+    // BADGE UPDATE (Force Direct DOM Update)
+    // -----------------------------------------------------
+    if (badge) {
+        badge.textContent = validFiles.length;
+        badge.style.display = validFiles.length > 0 ? 'inline-flex' : 'none';
+        badge.style.backgroundColor = validFiles.length > 0 ? 'var(--primary)' : 'var(--danger)';
+        console.log('Badge updated to:', validFiles.length); // Debug
+    }
+
+    if (validFiles.length === 0) {
+        if (container) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+        }
+        if (empty) empty.style.display = 'flex';
         return;
     }
 
-    // Double check valid array for safety
-    if (!Array.isArray(files)) files = [files];
+    if (empty) empty.style.display = 'none';
+    if (container) container.style.display = 'flex';
 
-    // FILTER OUT NULLS/UNDEFINED
-    const validFiles = files.filter(f => f && f.Name);
+    if (container) {
+        container.innerHTML = validFiles.map(file => {
+            const size = (file.Length / 1024 / 1024).toFixed(2) + ' MB';
 
-    if (empty) empty.style.display = validFiles.length === 0 ? 'block' : 'none';
+            // Fix Date Parsing
+            let dateStr = 'Unknown Date';
+            if (file.LastWriteTime) {
+                try {
+                    // Parse ISO string
+                    const date = new Date(file.LastWriteTime);
+                    if (!isNaN(date.getTime())) {
+                        // Format: "Jan 4, 3:30 PM"
+                        dateStr = date.toLocaleDateString(undefined, {
+                            month: 'short', day: 'numeric', year: 'numeric'
+                        }) + ', ' + date.toLocaleTimeString(undefined, {
+                            hour: 'numeric', minute: '2-digit'
+                        });
+                    }
+                } catch (e) {
+                    console.error('Date parsing error', e);
+                }
+            }
 
-    container.innerHTML = validFiles.map(file => {
-        const size = (file.Length / 1024 / 1024).toFixed(2) + ' MB';
-        // Simple date formatting
-        const date = new Date(parseInt(file.LastWriteTime.replace(/\/Date\((\d+)\)\//, '$1')));
-        const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+            // Escape backslashes for string literal in onclick
+            const safePath = file.Name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-        return `
-        <div class="app-row">
-            <span class="icon">📦</span>
-            <div class="info">
-                <h3>${file.Name}</h3>
-                <p>${size} • ${dateStr}</p>
+            return `
+            <div class="app-row">
+                <span class="icon">📦</span>
+                <div class="info">
+                    <h3>${file.Name}</h3>
+                    <p>${size} • ${dateStr}</p>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-primary" onclick="confirmRunDownloaded('${safePath}')">Run</button>
+                    <button class="btn btn-danger" onclick="confirmDeleteDownloaded('${safePath}')">Delete</button>
+                </div>
             </div>
-            <div class="actions">
-                <button class="btn btn-primary" onclick="confirmRunDownloaded('${file.Name}')">Run</button>
-                <button class="btn btn-danger" onclick="confirmDeleteDownloaded('${file.Name}')">Delete</button>
-            </div>
-        </div>
-    `}).join('');
+        `}).join('');
+    }
 
     log(`Rendered ${validFiles.length} downloaded files`);
-
-    // Update Badge
-    if (DOM.badge && DOM.badge.downloaded) {
-        DOM.badge.downloaded.textContent = validFiles.length;
-        DOM.badge.downloaded.style.display = validFiles.length > 0 ? 'inline-flex' : 'none';
-        // Add danger color if files exist
-        DOM.badge.downloaded.style.backgroundColor = validFiles.length > 0 ? 'var(--primary)' : 'var(--danger)';
-    }
-
-    if (files.length > 0) {
-        log('First file object:', files[0]);
-    }
 }
 
 async function fetchDownloaded() {
@@ -848,19 +1042,29 @@ window.confirmRunDownloaded = async function (fileName) {
 
     if (confirmed) {
         showToast(`Launching ${fileName}...`, 'info');
-        // We can use a simple task log or just toast
-        // For consistency, let's use toast as this is usually quick fire-and-forget
+
+        // Use Task Modal for feedback (Console View)
+        // Use a dummy ID for 'run' tasks as they don't map to a winget ID
+        const task = showTaskModal(`Run: ${fileName}`, 'run-task');
+        updateTaskLog(task, `File: ${fileName}`, 'info');
+        updateTaskLog(task, `Requesting launch via PowerShell...`, 'info');
 
         fetch(`/api/downloaded/run?file=${encodeURIComponent(fileName)}`)
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
-                    showToast('Installer launched!', 'success');
+                if (data.success && data.jobId) {
+                    pollJob(data.jobId, task, 'Launched successfully!', 'Launch failed', () => {
+                        // Optional: close modal automatically on success? 
+                        // User might want to see output.
+                    });
                 } else {
-                    showToast(`Failed to launch: ${data.message}`, 'error');
+                    updateTaskLog(task, '✗ Launch failed', 'error');
+                    if (data.message) updateTaskLog(task, data.message, 'error');
                 }
             })
-            .catch(() => showToast('Network error', 'error'));
+            .catch(() => {
+                updateTaskLog(task, '✗ Network error', 'error');
+            });
     }
 };
 
@@ -877,10 +1081,11 @@ window.confirmDeleteDownloaded = async function (fileName) {
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    showToast('File deleted', 'success');
-                    loadDownloaded(); // Refresh list
+                    showToast(`Deleted ${fileName}`, 'success');
+                    // Refresh list AND BADGE immediately
+                    loadDownloaded(false);
                 } else {
-                    showToast(`Delete failed: ${data.message}`, 'error');
+                    showToast(`Failed to delete: ${data.message}`, 'error');
                 }
             })
             .catch(() => showToast('Network error', 'error'));
@@ -890,6 +1095,46 @@ window.confirmDeleteDownloaded = async function (fileName) {
 // ==========================================
 function switchView(viewName) {
     log(`Switching to: ${viewName}`);
+
+    // RESET LOGIC: Clear state before switching
+    if (viewName !== 'search') {
+        // Clear search if leaving search
+        if (DOM.inputs.search) DOM.inputs.search.value = '';
+        if (DOM.containers.searchResults) DOM.containers.searchResults.innerHTML = '';
+        if (DOM.containers.searchEmpty) DOM.containers.searchEmpty.style.display = 'block';
+        if (DOM.containers.searchLoading) DOM.containers.searchLoading.style.display = 'none';
+        const welcome = document.getElementById('search-welcome');
+        if (welcome) welcome.style.display = 'block';
+        const clearBtn = document.getElementById('clear-search');
+        if (clearBtn) clearBtn.style.display = 'none';
+
+        // Hide initial empty text if we want a fresh start
+        if (DOM.containers.searchEmpty) DOM.containers.searchEmpty.innerHTML = '<div class="empty-icon">🔍</div><h3>Search Packages</h3><p>Type to search...</p>';
+    }
+
+    // Reset filters
+    if (DOM.inputs.filterInstalled) {
+        DOM.inputs.filterInstalled.value = '';
+        document.getElementById('clear-filter-installed').style.display = 'none';
+        // Restore full list if cached
+        if (State.cache.installed) renderInstalledApps(State.cache.installed);
+    }
+
+    if (DOM.inputs.filterUpdates) {
+        DOM.inputs.filterUpdates.value = '';
+        document.getElementById('clear-filter-updates').style.display = 'none';
+        // Restore full list if cached
+        if (State.cache.updates) renderUpdates(State.cache.updates);
+    }
+
+    // Reset Scroll Positions
+    if (DOM.containers.installedList) DOM.containers.installedList.scrollTop = 0;
+    if (DOM.containers.updatesGrid) DOM.containers.updatesGrid.scrollTop = 0;
+    if (DOM.containers.downloadedList) DOM.containers.downloadedList.scrollTop = 0; // Assuming this exists or using ID
+    const downloadedList = document.getElementById('downloaded-list');
+    if (downloadedList) downloadedList.scrollTop = 0;
+
+    // Standard View Switching
     State.currentView = viewName;
 
     document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -906,6 +1151,7 @@ function switchView(viewName) {
         }
     });
 
+    // Load data if needed (or assume cache is valid but user wants to see "default" view)
     if (viewName === 'installed' && !State.cache.installed) {
         loadInstalled();
     }
@@ -913,7 +1159,7 @@ function switchView(viewName) {
         loadUpdates();
     }
     if (viewName === 'downloaded') {
-        loadDownloaded();
+        loadDownloaded(); // Always refresh downloaded to be safe? Or just check cache
     }
 }
 
@@ -921,7 +1167,15 @@ function switchView(viewName) {
 // DATA LOADING
 // ==========================================
 async function loadInstalled(refresh = false, background = false) {
-    if (!background) showLoading();
+    const loading = document.getElementById('installed-loading');
+    const container = DOM.containers.installedList;
+
+    if (!background && loading) {
+        loading.style.display = 'flex'; // Flex for centering
+        container.style.display = 'none';
+        // Also hide empty state if we had one (not currently tracked in DOM global but good practice)
+    }
+
     try {
         const apps = await fetchInstalled(refresh);
 
@@ -944,13 +1198,23 @@ async function loadInstalled(refresh = false, background = false) {
         if (refresh && !background) showToast('Installed apps refreshed', 'success');
     } catch (error) {
         log('Error loading installed', error);
+        container.innerHTML = '<div class="error-state"><p>Failed to load installed apps</p></div>';
+        container.style.display = 'block';
     } finally {
-        if (!background) hideLoading();
+        if (!background && loading) loading.style.display = 'none';
+        if (!background) container.style.display = 'flex'; // Restore list
     }
 }
 
 async function loadUpdates(refresh = false, background = false) {
-    if (!background) showLoading();
+    const loading = document.getElementById('updates-loading');
+    const container = DOM.containers.updatesGrid;
+
+    if (!background && loading) {
+        loading.style.display = 'flex';
+        container.style.display = 'none';
+    }
+
     try {
         const updates = await fetchUpdates(refresh);
         State.cache.updates = updates;
@@ -958,8 +1222,11 @@ async function loadUpdates(refresh = false, background = false) {
         if (refresh && !background) showToast('Updates checked', 'success');
     } catch (error) {
         log('Error loading updates', error);
+        container.innerHTML = '<div class="error-state"><p>Failed to load updates</p></div>';
+        container.style.display = 'grid';
     } finally {
-        if (!background) hideLoading();
+        if (!background && loading) loading.style.display = 'none';
+        if (!background) container.style.display = 'grid';
     }
 }
 
@@ -1165,6 +1432,35 @@ document.addEventListener('DOMContentLoaded', () => {
         closeIgnoredBtn.addEventListener('click', closeIgnoredModal);
     }
 
+    // Update All button
+    const updateAllBtn = document.getElementById('update-all-btn');
+    if (updateAllBtn) {
+        updateAllBtn.addEventListener('click', updateAllApps);
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Escape to close modals
+        if (e.key === 'Escape') {
+            const taskModal = document.getElementById('task-modal');
+            const ignoredModal = document.getElementById('ignored-modal');
+            const confirmDialog = document.getElementById('confirm-dialog');
+
+            if (ignoredModal && ignoredModal.style.display === 'flex') {
+                closeIgnoredModal();
+            } else if (confirmDialog && confirmDialog.style.display !== 'none') {
+                confirmDialog.style.display = 'none';
+            } else if (taskModal && taskModal.style.display !== 'none') {
+                minimizeModal();
+            }
+        }
+
+        // Enter to search
+        if (e.key === 'Enter' && document.activeElement.id === 'search-input') {
+            handleSearch();
+        }
+    });
+
     const refreshDownloaded = document.getElementById('refresh-downloaded');
     if (refreshDownloaded) {
         refreshDownloaded.addEventListener('click', () => {
@@ -1191,4 +1487,200 @@ document.addEventListener('DOMContentLoaded', () => {
     loadDownloaded();
 
     log('Ready!');
+});
+
+// ==========================================
+// IGNORED APPS MODAL
+// ==========================================
+function openIgnoredModal() {
+    const ignoredApps = getIgnoredApps();
+    const modal = document.getElementById('ignored-modal');
+    const list = document.getElementById('ignored-list');
+
+    if (!modal || !list) return;
+
+    list.innerHTML = '';
+
+    if (ignoredApps.length === 0) {
+        list.innerHTML = `
+            <div style="flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; color: var(--text-secondary);">
+                <div style="font-size: 3rem; margin-bottom: 12px; opacity: 0.5;">📋</div>
+                <p style="margin: 0;">No ignored apps</p>
+            </div>
+        `;
+    } else {
+        ignoredApps.forEach(app => {
+            const item = document.createElement('div');
+            item.style.cssText = `
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 12px 16px;
+                background: var(--bg-light);
+                border-radius: 8px;
+                margin-bottom: 8px;
+            `;
+
+            item.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 500; margin-bottom: 2px;">${app.name}</div>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">${app.id}</div>
+                </div>
+                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.85rem;" 
+                        onclick="unignoreApp('${app.id.replace(/'/g, "\\'")}', '${app.name.replace(/'/g, "\\'")}')">
+                    Un-ignore
+                </button>
+            `;
+
+            list.appendChild(item);
+        });
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeIgnoredModal() {
+    const modal = document.getElementById('ignored-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function unignoreApp(id, name) {
+    const ignored = getIgnoredApps();
+    const updated = ignored.filter(app => app.id !== id);
+    localStorage.setItem('ignoredApps', JSON.stringify(updated));
+
+    showToast(`${name} removed from ignored list`, 'success');
+    openIgnoredModal(); // Refresh the modal
+    loadUpdates(true); // Refresh updates view
+}
+
+// ==========================================
+// UPDATE ALL APPS
+// ==========================================
+async function updateAllApps() {
+    const updates = State.cache.updates || [];
+    if (updates.length === 0) {
+        showToast('No updates available', 'info');
+        return;
+    }
+
+    const confirmed = await customConfirm(
+        'Update All Applications',
+        `Update ${updates.length} application(s)?\n\nThis will update all available packages.`,
+        '⬆️'
+    );
+
+    if (!confirmed) return;
+
+    showToast(`Starting batch update of ${updates.length} app(s)...`, 'info');
+
+    // Update sequentially to avoid overwhelming the system
+    for (const app of updates) {
+        const task = showTaskModal(`Updating ${app.name}`, app.id);
+        updateTaskLog(task, `Package ID: ${app.id}`, 'info');
+        updateTaskLog(task, `Current: v${app.current || 'Unknown'}`, 'info');
+        updateTaskLog(task, `Available: v${app.version || 'Unknown'}`, 'info');
+        updateTaskLog(task, `Requesting update...`, 'info');
+
+        try {
+            const res = await fetch(`/api/update?id=${encodeURIComponent(app.id)}`);
+            const data = await res.json();
+
+            if (data.success && data.jobId) {
+                // Wait for this update to complete before starting next
+                await new Promise((resolve) => {
+                    pollJob(data.jobId, task, `${app.name} updated!`, `Failed to update ${app.name}`, resolve);
+                });
+            } else {
+                updateTaskLog(task, '✗ Update request failed', 'error');
+                if (data.message) updateTaskLog(task, data.message, 'error');
+            }
+        } catch (err) {
+            updateTaskLog(task, '✗ Network error', 'error');
+        }
+
+        // Small delay between updates
+        await new Promise(r => setTimeout(r, 1000));
+    }
+
+    showToast('Batch update completed!', 'success');
+    loadUpdates(true); // Refresh the updates list
+}
+
+window.copyToClipboard = function (text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('ID copied to clipboard!', 'success');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+};
+
+function setupRealTimeFiltering() {
+    const filterInstalled = document.getElementById('filter-installed');
+    const filterUpdates = document.getElementById('filter-updates');
+
+    if (filterInstalled) {
+        filterInstalled.addEventListener('input', debounce((e) => {
+            const val = e.target.value;
+            // Update clear button visibility
+            const clearBtn = document.getElementById('clear-filter-installed');
+            if (clearBtn) clearBtn.style.display = val ? 'inline-block' : 'none';
+            // Re-render list
+            if (State.cache.installed) {
+                renderInstalledApps(State.cache.installed, val);
+            }
+        }, 300));
+    }
+
+    if (filterUpdates) {
+        filterUpdates.addEventListener('input', debounce((e) => {
+            const val = e.target.value;
+            // Update clear button visibility
+            const clearBtn = document.getElementById('clear-filter-updates');
+            if (clearBtn) clearBtn.style.display = val ? 'inline-block' : 'none';
+            // Re-render list
+            if (State.cache.updates) {
+                renderUpdates(State.cache.updates, val);
+            }
+        }, 300));
+    }
+}
+
+// Call this in initialization
+document.addEventListener('DOMContentLoaded', () => {
+    // ... existing init code ...
+    setupRealTimeFiltering();
+});
+
+// ==========================================
+// HEARTBEAT & AUTO-CLOSE
+// ==========================================
+// Send keepalive ping every 500ms (faster checks)
+setInterval(() => {
+    fetch('/api/keepalive', { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } })
+        .catch(() => {
+            console.warn('Server disconnected!');
+            // Server died or network lost
+            // Attempt to close window or show message
+            document.body.innerHTML = `
+                <div style="
+                    position:fixed; top:0; left:0; width:100%; height:100%;
+                    background: #1e1e1e; color: #fff;
+                    display:flex; flex-direction:column;
+                    align-items:center; justify-content:center;
+                    font-family: sans-serif; z-index:99999;
+                ">
+                    <h1>Server Stopped</h1>
+                    <p>You can close this tab now.</p>
+                </div>
+            `;
+            // Try closing (often blocked unless script opened window)
+            window.close();
+        });
+}, 500);
+
+// INSTANT SHUTDOWN ON TAB CLOSE
+window.addEventListener('beforeunload', () => {
+    // Send beacon (fire and forget)
+    navigator.sendBeacon('/api/shutdown');
 });
