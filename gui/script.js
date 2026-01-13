@@ -31,6 +31,16 @@ function debounce(func, wait) {
     };
 }
 
+function copyToClipboard(text) {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('App ID copied to clipboard!', 'info');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        showToast('Failed to copy ID', 'error');
+    });
+}
+
 
 // ==========================================
 // DOM ELEMENTS
@@ -288,7 +298,15 @@ function getDomain(id) {
         'Kubernetes.Kubernetes': 'kubernetes.io',
         'Microsoft.WindowsTerminal': 'learn.microsoft.com', // Generic
         'XPipe.XPipe': 'xpipe.io',
-        'JanDeDobbeleer.OhMyPosh': 'ohmyposh.dev'
+        'JanDeDobbeleer.OhMyPosh': 'ohmyposh.dev',
+        // Adobe Products
+        'Adobe.Acrobat.Reader.32-bit': 'adobe.com',
+        'Adobe.Acrobat.Reader.64-bit': 'adobe.com',
+        'Adobe.Acrobat.Pro': 'adobe.com',
+        'Adobe.CreativeCloud': 'adobe.com',
+        'Adobe.Photoshop': 'adobe.com',
+        'Adobe.Premiere': 'adobe.com',
+        'Adobe.Illustrator': 'adobe.com'
     };
 
     if (PRODUCT_MAP[id]) return PRODUCT_MAP[id];
@@ -793,7 +811,8 @@ function showTaskModal(title, appId) {
         output: [],
         progress: 0,
         stage: 'init',
-        processedLines: 0 // Track processed log lines
+        processedLines: 0, // Track processed log lines
+        jobId: null // Will be set when job starts
     };
 
     State.currentTask = newTask;
@@ -803,6 +822,40 @@ function showTaskModal(title, appId) {
     backdrop.style.display = 'block';
     DOM.modal.container.style.display = 'flex';
     document.body.classList.add('modal-open');
+
+    // Show cancel button (Reset state)
+    const modalActions = document.getElementById('modal-actions');
+    if (modalActions) {
+        modalActions.classList.remove('fade-out'); // Reset animation
+
+        // Hide immediately for Uninstall tasks or if specifically requested
+        if (title.toLowerCase().includes('uninstall')) {
+            modalActions.style.display = 'none';
+        } else {
+            modalActions.style.display = 'flex';
+        }
+    }
+
+    // Setup cancel button
+    const cancelBtn = document.getElementById('cancel-task-btn');
+    if (cancelBtn) {
+        cancelBtn.onclick = () => {
+            if (newTask.stage !== 'complete' && newTask.stage !== 'error') {
+                updateTaskLog(newTask, '⚠️ Task cancelled by user', 'error');
+                newTask.stage = 'error';
+                newTask.progress = 100;
+                showToast('Task cancelled', 'info');
+
+                // Kill server process
+                if (newTask.jobId) {
+                    fetch(`/api/cancel?id=${newTask.jobId}`);
+                }
+
+                // Hide cancel button
+                if (modalActions) modalActions.style.display = 'none';
+            }
+        };
+    }
 
     // Initial log
     updateTaskLog(newTask, 'Starting task...', 'info');
@@ -824,6 +877,10 @@ function closeModal() {
 
     // Unlock body scroll
     document.body.classList.remove('modal-open');
+
+    // Hide cancel button for next time
+    const modalActions = document.getElementById('modal-actions');
+    if (modalActions) modalActions.style.display = 'none';
 
     State.currentTask = null;
 }
@@ -1039,6 +1096,22 @@ async function processLogLinesWithDelay(task, lines) {
         } else if (!isProgress && i < lines.length - 1) {
             await new Promise(r => setTimeout(r, 10));
         }
+
+        // --- NEW: Detect Install Phase and Hide Cancel Button ---
+        // Once installation starts, we shouldn't allow cancellation (it might corrupt state)
+        if (
+            trimmed.includes('Installing...') ||
+            trimmed.includes('Updating...') ||
+            trimmed.includes('Upgrading...') ||
+            trimmed.includes('Verifying...') ||
+            trimmed.includes('Successfully verified') ||
+            trimmed.includes('Starting package install')
+        ) {
+            const actions = document.getElementById('modal-actions');
+            if (actions && !actions.classList.contains('fade-out')) {
+                actions.classList.add('fade-out');
+            }
+        }
     }
 }
 
@@ -1067,6 +1140,7 @@ window.confirmInstall = async function (id, name) {
             .then(res => res.json())
             .then(data => {
                 if (data.success && data.jobId) {
+                    task.jobId = data.jobId;
                     updateTaskLog(task, '✓ Request accepted. Starting background job...', 'info');
                     pollJob(data.jobId, task, `${safeName} installed successfully!`, `Failed by install ${safeName}`, () => {
                         fetchInstalled(true);
@@ -1102,6 +1176,7 @@ window.confirmDownload = async function (id, name) {
             .then(res => res.json())
             .then(data => {
                 if (data.success && data.jobId) {
+                    task.jobId = data.jobId;
                     pollJob(data.jobId, task, `${safeName} downloaded!`, `Failed to download ${safeName}`, () => {
                         loadDownloaded(true);
                     });
@@ -1132,6 +1207,7 @@ window.confirmUninstall = async function (id, name) {
             .then(res => res.json())
             .then(data => {
                 if (data.success && data.jobId) { // Check for jobId
+                    task.jobId = data.jobId;
                     pollJob(data.jobId, task, `${safeName} uninstalled!`, `Failed to uninstall ${safeName}`, () => {
                         loadInstalled(true);
                     });
@@ -1162,6 +1238,7 @@ window.confirmUpdate = async function (id, name) {
             .then(res => res.json())
             .then(data => {
                 if (data.success && data.jobId) {
+                    task.jobId = data.jobId;
                     pollJob(data.jobId, task, `${safeName} updated!`, `Failed to update ${safeName}`, () => {
                         loadUpdates(true);
                     });
@@ -1233,8 +1310,11 @@ function renderSearchResults(results) {
             `;
         }
 
+        const infoIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+
         return `
         <div class="app-card">
+            <button class="btn-info-corner" onclick="showPackageDetails('${app.id}', '${app.name.replace(/'/g, "\\'")}', '${app.version || ''}', ${isInstalled})" title="View Details">${infoIconSvg}</button>
             ${getAppIconHTML(app)}
             <h3>${app.name}</h3>
             <div 
@@ -2197,4 +2277,393 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- HEARTBEAT & AUTO-SHUTDOWN REMOVED ---
+
+// ==========================================
+// PACKAGE DETAILS MODAL
+// ==========================================
+let currentDetailsApp = { id: '', name: '', isInstalled: false };
+
+window.showPackageDetails = async function (id, name, version, isInstalled = false) {
+    currentDetailsApp = { id, name, isInstalled };
+
+    const modal = document.getElementById('details-modal');
+    const backdrop = document.getElementById('details-modal-backdrop');
+    const loading = document.getElementById('details-loading');
+    const content = document.getElementById('details-content');
+
+    // Show modal with animation
+    backdrop.style.display = 'block';
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('show'), 10);
+
+    // Set initial header info
+    document.getElementById('details-name').textContent = name;
+    document.getElementById('details-id').textContent = id;
+    document.getElementById('details-version').textContent = version ? `v${version}` : '';
+
+    // Set icon using unified logic
+    const detailsIconContainer = document.getElementById('details-icon');
+    if (detailsIconContainer) {
+        detailsIconContainer.innerHTML = getAppIconHTML({ id: id, name: name }, isInstalled);
+
+        // Trigger load for this specific icon
+        const newImg = detailsIconContainer.querySelector('.lazy-icon');
+        if (newImg) {
+            // If loadIcon is globally available
+            if (typeof loadIcon === 'function') {
+                loadIcon(newImg);
+            }
+            // Or try to hook into existing observer if available
+            else if (typeof observeIcons === 'function') {
+                observeIcons();
+            }
+        }
+    }
+
+    // Show loading, hide content
+    loading.style.display = 'flex';
+    content.style.display = 'none';
+
+    // Setup action buttons based on installed status
+    const installBtn = document.getElementById('details-install-btn');
+    const downloadBtn = document.getElementById('details-download-btn');
+
+    if (isInstalled) {
+        installBtn.textContent = 'Uninstall';
+        installBtn.className = 'btn btn-danger';
+        installBtn.onclick = () => {
+            closeDetailsModal();
+            confirmUninstall(id, name);
+        };
+    } else {
+        installBtn.textContent = 'Install';
+        installBtn.className = 'btn btn-primary';
+        installBtn.onclick = () => {
+            closeDetailsModal();
+            confirmInstall(id, name);
+        };
+    }
+
+    downloadBtn.onclick = () => {
+        closeDetailsModal();
+        confirmDownload(id, name);
+    };
+
+    // Fetch details
+    try {
+        const res = await fetch(`/api/details?id=${encodeURIComponent(id)}`);
+        const data = await res.json();
+
+        if (data.success && data.details) {
+            populateDetailsModal(data.details);
+        } else {
+            // Show error in description
+            document.getElementById('details-description').textContent = 'Could not load package details.';
+            document.getElementById('details-publisher-section').style.display = 'none';
+            document.getElementById('details-tags-section').style.display = 'none';
+            document.getElementById('details-installer-section').style.display = 'none';
+            document.getElementById('details-homepage-section').style.display = 'none';
+        }
+    } catch (e) {
+        document.getElementById('details-description').textContent = 'Error loading package details: ' + e.message;
+    }
+
+    loading.style.display = 'none';
+    content.style.display = 'block';
+};
+
+function populateDetailsModal(details) {
+    // Name (if available from API)
+    if (details.name) {
+        document.getElementById('details-name').textContent = details.name;
+    }
+
+    // Version
+    if (details.version) {
+        document.getElementById('details-version').textContent = `v${details.version}`;
+    }
+
+    // Description
+    const descEl = document.getElementById('details-description');
+    if (details.description) {
+        descEl.textContent = details.description;
+        document.getElementById('details-description-section').style.display = 'block';
+    } else {
+        document.getElementById('details-description-section').style.display = 'none';
+    }
+
+    // Publisher
+    document.getElementById('details-publisher').textContent = details.publisher || '-';
+    document.getElementById('details-author').textContent = details.author || '-';
+    document.getElementById('details-license').textContent = details.license || '-';
+    document.getElementById('details-copyright').textContent = details.copyright || '-';
+
+    // Hide empty rows
+    document.getElementById('row-author').style.display = details.author ? 'flex' : 'none';
+    document.getElementById('row-copyright').style.display = details.copyright ? 'flex' : 'none';
+
+    // Tags
+    const tagsContainer = document.getElementById('details-tags');
+    const tagsSection = document.getElementById('details-tags-section');
+    if (details.tags && details.tags.length > 0) {
+        tagsContainer.innerHTML = details.tags.map(tag =>
+            `<span class="details-tag">${tag}</span>`
+        ).join('');
+        tagsSection.style.display = 'block';
+    } else {
+        tagsSection.style.display = 'none';
+    }
+
+    // Installer
+    document.getElementById('details-installer-type').textContent = details.installerType || '-';
+    const urlEl = document.getElementById('details-installer-url');
+    if (details.installerUrl) {
+        urlEl.textContent = details.installerUrl;
+        urlEl.href = details.installerUrl;
+        urlEl.title = details.installerUrl;
+        document.getElementById('row-installer-url').style.display = 'flex';
+    } else {
+        document.getElementById('row-installer-url').style.display = 'none';
+    }
+
+    // Homepage
+    const homepageSection = document.getElementById('details-homepage-section');
+    const homepageEl = document.getElementById('details-homepage');
+    if (details.homepage) {
+        homepageEl.href = details.homepage;
+        homepageEl.textContent = details.homepage.replace(/^https?:\/\//, '').replace(/\/$/, '');
+        homepageSection.style.display = 'block';
+    } else {
+        homepageSection.style.display = 'none';
+    }
+}
+
+function closeDetailsModal() {
+    const modal = document.getElementById('details-modal');
+    const backdrop = document.getElementById('details-modal-backdrop');
+
+    modal.classList.remove('show');
+    setTimeout(() => {
+        modal.style.display = 'none';
+        backdrop.style.display = 'none';
+    }, 300);
+}
+
+// Event listeners for details modal
+document.addEventListener('DOMContentLoaded', () => {
+    // Close button
+    const closeBtn = document.getElementById('close-details-modal');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeDetailsModal);
+    }
+
+    // Backdrop click
+    const backdrop = document.getElementById('details-modal-backdrop');
+    if (backdrop) {
+        backdrop.addEventListener('click', closeDetailsModal);
+    }
+
+    // Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('details-modal');
+            if (modal && modal.style.display !== 'none') {
+                closeDetailsModal();
+            }
+        }
+    });
+
+    // Check search input on load and setup clear handler
+    // Check search input on load and setup clear handler
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        // --- INITIAL STATE FIX ---
+        // Force reset UI on load (Hide empty/loading, Show Welcome)
+        document.getElementById('search-empty').style.display = 'none';
+        document.getElementById('search-loading').style.display = 'none';
+
+        const welcome = document.getElementById('search-welcome');
+        if (welcome) welcome.style.display = 'flex';
+
+        // Retrieve existing value (if cached)
+        if (searchInput.value.trim().length > 0) {
+            welcome.style.display = 'none';
+            // Trigger search? Or just leave it? 
+            // Better to let user type or click search.
+        }
+        // Debounce function (500ms) to prevent too many requests
+        const debouncedSearch = debounce(async (query) => {
+            if (query.length < 2) return;
+
+            // Show loading state
+            document.getElementById('search-loading').style.display = 'flex';
+            document.getElementById('search-empty').style.display = 'none';
+            document.getElementById('search-results').innerHTML = '';
+            const welcome = document.getElementById('search-welcome');
+            if (welcome) welcome.style.display = 'none';
+
+            try {
+                // Use existing search function
+                const results = await searchApps(query);
+
+                // Hide loading
+                document.getElementById('search-loading').style.display = 'none';
+
+                if (results && results.length > 0) {
+                    renderSearchResults(results);
+                } else {
+                    const emptyState = document.getElementById('search-empty');
+                    emptyState.innerHTML = `
+                        <div class="empty-icon">😕</div>
+                        <h3>No results found</h3>
+                        <p>We couldn't find anything for "${query.replace(/</g, '&lt;')}"</p>
+                    `;
+                    emptyState.style.display = 'flex';
+                }
+            } catch (e) {
+                console.error("Auto-search error", e);
+                document.getElementById('search-loading').style.display = 'none';
+            }
+        }, 500);
+
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+
+            if (query === '') {
+                // CLEAR: Show Welcome
+                document.getElementById('search-results').innerHTML = '';
+                document.getElementById('search-empty').style.display = 'none';
+                document.getElementById('search-loading').style.display = 'none';
+
+                const welcome = document.getElementById('search-welcome');
+                if (welcome) welcome.style.display = 'flex';
+            } else {
+                // TYPING: Hide Welcome
+                const welcome = document.getElementById('search-welcome');
+                if (welcome) welcome.style.display = 'none';
+
+                if (query.length >= 2) {
+                    // Valid Query: Trigger Search
+                    debouncedSearch(query);
+                } else {
+                    // Too Short: Show "Start typing"
+                    const emptyState = document.getElementById('search-empty');
+                    document.getElementById('search-results').innerHTML = ''; // Clear previous results
+                    document.getElementById('search-loading').style.display = 'none';
+
+                    emptyState.innerHTML = `
+                        <div class="empty-icon">✍️</div>
+                        <h3>Start typing</h3>
+                        <p>Enter at least 2 characters</p>
+                    `;
+                    emptyState.style.display = 'flex';
+                }
+            }
+        });
+    }
+
+
+    // ==========================================
+    // CONNECTION STATUS INDICATOR
+    // ==========================================
+    const statusEl = document.getElementById('connection-status');
+    const statusIcon = statusEl ? statusEl.querySelector('.status-icon') : null;
+    const statusText = statusEl ? statusEl.querySelector('.status-text') : null;
+    let serverCheckInterval = null;
+
+    function showConnectionStatus(type, message, autoHide = false) {
+        if (!statusEl || !statusIcon || !statusText) return;
+
+        // Reset classes
+        statusEl.className = 'connection-status show';
+        statusEl.classList.add(type);
+
+        // Set Content
+        statusText.textContent = message;
+
+        // Remove previous specific icons if needed, but we just set textContent
+        switch (type) {
+            case 'offline':
+                statusIcon.textContent = '🏝️';
+                break;
+            case 'online':
+                statusIcon.textContent = '🥳';
+                break;
+            case 'server-down':
+                statusIcon.textContent = '⚠️';
+                break;
+        }
+
+        if (autoHide) {
+            setTimeout(() => {
+                statusEl.classList.remove('show');
+            }, 1000); // Hide after 1s (was 2s)
+        }
+    }
+
+    // Internet Events
+    window.addEventListener('offline', () => {
+        showConnectionStatus('offline', 'Oops! No Internet connection.');
+    });
+
+    window.addEventListener('online', () => {
+        showConnectionStatus('online', 'Yay! Internet is back!', true);
+        // Check server immediately when internet comes back
+        clearTimeout(serverCheckInterval);
+        checkServerStatus();
+    });
+
+    // Server Status Check
+    // Server Status Check
+    let serverFailCount = 0;
+    const MAX_RETRIES = 3;
+
+    async function checkServerStatus() {
+        // If computer is offline, don't blame the server
+        if (!navigator.onLine) {
+            setTimeout(checkServerStatus, 5000);
+            return;
+        }
+
+        try {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), 3000); // Increased timeout to 3s
+
+            // Just a lightweight check
+            const res = await fetch('/version.json', {
+                method: 'HEAD',
+                signal: controller.signal
+            });
+            clearTimeout(id);
+
+            if (res.ok) {
+                // Reset fail count on success
+                serverFailCount = 0;
+
+                // If previously showing server error, hide it/show restored
+                if (statusEl && statusEl.classList.contains('server-down') && statusEl.classList.contains('show')) {
+                    showConnectionStatus('online', 'Server connection restored!', true);
+                }
+            } else {
+                throw new Error('Server not OK');
+            }
+        } catch (e) {
+            // Only show server error if internet is presumably UP
+            if (navigator.onLine) {
+                serverFailCount++;
+                // Only show error after 3 consecutive failures
+                if (serverFailCount >= MAX_RETRIES) {
+                    showConnectionStatus('server-down', 'Server connection lost!\nStart EasyWinget again.');
+                }
+            }
+        }
+
+        // Poll every 5 seconds (increased from 2s to reduce load)
+        serverCheckInterval = setTimeout(checkServerStatus, 5000);
+    }
+
+    // Start polling
+    checkServerStatus();
+
+}); // End DOMContentLoaded
 

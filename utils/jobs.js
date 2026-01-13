@@ -145,5 +145,21 @@ module.exports = {
 
     cleanupJob: (jobId) => {
         activeJobs.delete(jobId);
+    },
+
+    cancelJob: (jobId) => {
+        const job = activeJobs.get(jobId);
+        if (job && job.process) {
+            console.log(`[Job Manager] Killing job ${jobId}`);
+            try {
+                job.process.kill();
+                job.done = true;
+                return true;
+            } catch (e) {
+                console.error(`[Job Manager] Error killing job ${jobId}:`, e);
+                return false;
+            }
+        }
+        return false;
     }
 };

@@ -15,6 +15,16 @@ const PORT = 8080;
 app.use(cors());
 app.use(express.json());
 
+// --- GLOBAL ERROR HANDLERS ---
+// Prevent server crash on unhandled timeouts/errors (e.g. from fetch)
+process.on('uncaughtException', (err) => {
+    console.error('[System] Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[System] Unhandled Rejection:', reason);
+});
+
 // --- HEARTBEAT & AUTO-SHUTDOWN REMOVED ---
 // Server now runs until manually stopped
 
@@ -239,6 +249,15 @@ app.get('/api/manifest', async (req, res) => {
     const { id } = req.query;
     if (!id) return res.json({ success: false });
 
+    // Validate ID format - reject obviously malformed IDs
+    // Valid winget IDs can start with letters or numbers (e.g., 7gxycn08.WinGetCreateGui)
+    if (id.length < 3 ||
+        id.includes(' ') ||
+        id.includes('%20') ||
+        /^\./.test(id)) {  // Only reject if starts with dot
+        return res.json({ success: false, reason: 'invalid_id' });
+    }
+
     if (manifestCache.has(id)) {
         return res.json(manifestCache.get(id));
     }
@@ -248,82 +267,246 @@ app.get('/api/manifest', async (req, res) => {
     const cmd = `winget show --id "${id}" --accept-source-agreements --disable-interactivity`;
 
     exec(cmd, { encoding: 'utf8' }, async (err, stdout, stderr) => {
-        if (err) {
-            return res.json({ success: false });
-        }
-
-        // Extract ALL URLs from the output (in order of appearance)
-        const urlRegex = /:\s+(https?:\/\/[^\s]+)/gi;
-        const allUrls = [];
-        let match;
-        while ((match = urlRegex.exec(stdout)) !== null) {
-            const url = match[1];
-            // Clean up trailing characters that might be part of the line
-            const cleanUrl = url.replace(/[,;)>\]]+$/, '');
-            if (!allUrls.includes(cleanUrl)) {
-                allUrls.push(cleanUrl);
-            }
-        }
-
-        // Move GitHub URLs to end (they usually have GitHub's favicon, not app's)
-        const nonGithubUrls = allUrls.filter(u => !u.includes('github.com') && !u.includes('github.io'));
-        const githubUrls = allUrls.filter(u => u.includes('github.com') || u.includes('github.io'));
-        const sortedUrls = [...nonGithubUrls, ...githubUrls];
-
-        // Helper: Get root domain from hostname (remove subdomain)
-        const getRootDomain = (hostname) => {
-            const parts = hostname.split('.');
-            // Handle special cases like co.uk, com.au etc.
-            if (parts.length > 2) {
-                return parts.slice(-2).join('.');
-            }
-            return hostname;
+        // Guard against sending multiple responses
+        let responseSent = false;
+        const sendResponse = (data) => {
+            if (responseSent) return;
+            responseSent = true;
+            try {
+                res.json(data);
+            } catch (e) { }
         };
 
-        let domain = null;
-        let iconUrl = null;
-        let scrapeUrl = null;
+        try {
+            if (err) {
+                return sendResponse({ success: false });
+            }
 
-        // Try each URL in order (non-GitHub first, then GitHub)
-        for (const url of sortedUrls) {
-            if (iconUrl) break; // Already found one
-
-            try {
-                const u = new URL(url);
-                const hostname = u.hostname;
-
-                // 1. Try full URL first
-                scrapeUrl = url;
-                domain = hostname;
-                iconUrl = await scrapeIconFromUrl(url);
-
-                // 2. If failed, try just the domain root
-                if (!iconUrl) {
-                    const domainRoot = `https://${hostname}`;
-                    if (domainRoot !== url) {
-                        scrapeUrl = domainRoot;
-                        iconUrl = await scrapeIconFromUrl(domainRoot);
-                    }
+            // Extract ALL URLs from the output (in order of appearance)
+            const urlRegex = /:\s+(https?:\/\/[^\s]+)/gi;
+            const allUrls = [];
+            let match;
+            while ((match = urlRegex.exec(stdout)) !== null) {
+                const url = match[1];
+                // Clean up trailing characters that might be part of the line
+                const cleanUrl = url.replace(/[,;)>\]]+$/, '');
+                if (!allUrls.includes(cleanUrl)) {
+                    allUrls.push(cleanUrl);
                 }
+            }
 
-                // 3. If still failed and has subdomain, try root domain
-                if (!iconUrl) {
+            // Move GitHub URLs to end (they usually have GitHub's favicon, not app's)
+            const nonGithubUrls = allUrls.filter(u => !u.includes('github.com') && !u.includes('github.io'));
+            const githubUrls = allUrls.filter(u => u.includes('github.com') || u.includes('github.io'));
+            const sortedUrls = [...nonGithubUrls, ...githubUrls];
+
+            // Helper: Get root domain from hostname (remove subdomain)
+            const getRootDomain = (hostname) => {
+                const parts = hostname.split('.');
+                // Handle special cases like co.uk, com.au etc.
+                if (parts.length > 2) {
+                    return parts.slice(-2).join('.');
+                }
+                return hostname;
+            };
+
+            let domain = null;
+            let iconUrl = null;
+            let scrapeUrl = null;
+            let bestRootDomain = null; // Track the best root domain for Google fallback
+
+            // Try each URL in order (non-GitHub first, then GitHub)
+            for (const url of sortedUrls) {
+                if (iconUrl) break; // Already found one
+
+                try {
+                    const u = new URL(url);
+                    const hostname = u.hostname;
                     const rootDomain = getRootDomain(hostname);
-                    if (rootDomain !== hostname) {
-                        scrapeUrl = `https://${rootDomain}`;
-                        domain = rootDomain;
-                        iconUrl = await scrapeIconFromUrl(scrapeUrl);
-                    }
-                }
-            } catch (e) { }
-        }
 
-        const result = { success: !!iconUrl, domain, url: scrapeUrl, iconUrl };
-        manifestCache.set(id, result);
-        res.json(result);
+                    // Track best root domain (prefer non-CDN domains)
+                    if (!bestRootDomain || (!hostname.includes('cdn') && !hostname.includes('download'))) {
+                        bestRootDomain = rootDomain;
+                    }
+
+                    // 1. Try full URL first
+                    scrapeUrl = url;
+                    domain = hostname;
+                    iconUrl = await scrapeIconFromUrl(url);
+
+                    // 2. If failed, try just the domain root
+                    if (!iconUrl) {
+                        const domainRoot = `https://${hostname}`;
+                        if (domainRoot !== url) {
+                            scrapeUrl = domainRoot;
+                            iconUrl = await scrapeIconFromUrl(domainRoot);
+                        }
+                    }
+
+                    // 3. If still failed and has subdomain, try root domain
+                    if (!iconUrl) {
+                        if (rootDomain !== hostname) {
+                            scrapeUrl = `https://${rootDomain}`;
+                            domain = rootDomain;
+                            iconUrl = await scrapeIconFromUrl(scrapeUrl);
+                        }
+                    }
+                } catch (e) { }
+            }
+
+            // 4. FALLBACK: If all scraping failed but we have a root domain, use Google Favicon API
+            if (!iconUrl && bestRootDomain) {
+                iconUrl = `https://www.google.com/s2/favicons?domain=${bestRootDomain}&sz=128`;
+                domain = bestRootDomain;
+                scrapeUrl = `https://${bestRootDomain}`;
+            }
+
+            const result = { success: !!iconUrl, domain, url: scrapeUrl, iconUrl };
+            manifestCache.set(id, result);
+            sendResponse(result);
+        } catch (e) {
+            // Catch any unhandled errors to prevent server crash
+            console.error('[Manifest Error]', id, e.message);
+            sendResponse({ success: false, error: e.message });
+        }
     });
 });
 
+// ==========================================
+// PACKAGE DETAILS API
+// ==========================================
+app.get('/api/details', async (req, res) => {
+    const { id } = req.query;
+    if (!id) return res.json({ success: false, error: 'No ID provided' });
+
+    // Validate ID - allow IDs starting with numbers (e.g., 7gxycn08.WinGetCreateGui)
+    if (id.length < 3 || id.includes(' ') || /^\./.test(id)) {
+        return res.json({ success: false, error: 'Invalid ID' });
+    }
+
+    const cmd = `chcp 65001 > nul && winget show --id "${id}" --accept-source-agreements --disable-interactivity`;
+
+    exec(cmd, { encoding: 'utf8', maxBuffer: 5 * 1024 * 1024 }, (err, stdout, stderr) => {
+        try {
+            if (err && !stdout) {
+                return res.json({ success: false, error: 'Package not found' });
+            }
+
+            const lines = stdout.split(/\r?\n/);
+            const details = {
+                id: id,
+                name: '',
+                version: '',
+                publisher: '',
+                author: '',
+                moniker: '',
+                description: '',
+                license: '',
+                copyright: '',
+                homepage: '',
+                releaseNotes: '',
+                releaseNotesUrl: '',
+                tags: [],
+                installerType: '',
+                installerUrl: '',
+                installerSha256: ''
+            };
+
+            let currentSection = '';
+            let descriptionLines = [];
+            let collectingDescription = false;
+
+            for (const line of lines) {
+                // Detect section headers
+                if (line.startsWith('Found ')) {
+                    const match = line.match(/Found (.+?) \[(.+?)\]/);
+                    if (match) {
+                        details.name = match[1];
+                    }
+                    continue;
+                }
+
+                // Key: Value parsing
+                const kvMatch = line.match(/^([A-Za-z\s]+):\s*(.*)$/);
+                if (kvMatch) {
+                    const key = kvMatch[1].trim().toLowerCase();
+                    const value = kvMatch[2].trim();
+
+                    // End description collection when hitting next key
+                    if (collectingDescription && key !== 'description') {
+                        details.description = descriptionLines.join(' ').trim();
+                        collectingDescription = false;
+                    }
+
+                    switch (key) {
+                        case 'version':
+                            details.version = value;
+                            break;
+                        case 'publisher':
+                            details.publisher = value;
+                            break;
+                        case 'author':
+                            details.author = value;
+                            break;
+                        case 'moniker':
+                            details.moniker = value;
+                            break;
+                        case 'description':
+                            collectingDescription = true;
+                            if (value) descriptionLines.push(value);
+                            break;
+                        case 'license':
+                            details.license = value;
+                            break;
+                        case 'copyright':
+                            details.copyright = value;
+                            break;
+                        case 'homepage':
+                            details.homepage = value;
+                            break;
+                        case 'release notes url':
+                            details.releaseNotesUrl = value;
+                            break;
+                        case 'installer type':
+                            details.installerType = value;
+                            break;
+                        case 'installer url':
+                            details.installerUrl = value;
+                            break;
+                        case 'installer sha256':
+                            details.installerSha256 = value;
+                            break;
+                        case 'installer':
+                            currentSection = 'installer';
+                            break;
+                        case 'tags':
+                            currentSection = 'tags';
+                            break;
+                    }
+                } else if (line.startsWith('  ') && currentSection === 'tags') {
+                    // Tags are indented
+                    const tag = line.trim();
+                    if (tag && !tag.includes(':')) {
+                        details.tags.push(tag);
+                    }
+                } else if (collectingDescription && line.trim()) {
+                    // Multi-line description
+                    descriptionLines.push(line.trim());
+                }
+            }
+
+            // Final description collection
+            if (collectingDescription) {
+                details.description = descriptionLines.join(' ').trim();
+            }
+
+            res.json({ success: true, details });
+        } catch (e) {
+            console.error('[Details Error]', id, e.message);
+            res.json({ success: false, error: e.message });
+        }
+    });
+});
 // ==========================================
 // ICON SCRAPER (SERVER SIDE)
 // ==========================================
@@ -371,6 +554,13 @@ app.get('/api/search', async (req, res) => {
 });
 
 // --- JOBS (INSTALL/UNINSTALL/ETC) ---
+app.get('/api/cancel', (req, res) => {
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });
+
+    const success = jobs.cancelJob(id);
+    res.json({ success });
+});
 app.get('/api/install', (req, res) => {
     const { id } = req.query;
     if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });

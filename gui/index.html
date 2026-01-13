@@ -244,6 +244,9 @@
             <div id="progress-text" class="progress-text">Starting...</div>
         </div>
         <div id="modal-output" class="modal-output"></div>
+        <div class="modal-actions" id="modal-actions" style="display:none;">
+            <button id="cancel-task-btn" class="btn btn-danger">Cancel</button>
+        </div>
     </div>
 
     <!-- Ignored Apps Modal -->
@@ -267,6 +270,98 @@
         </div>
     </div>
 
+    <!-- Package Details Modal -->
+    <div id="details-modal-backdrop" class="modal-backdrop" style="display:none; z-index: 2500;"></div>
+    <div id="details-modal" class="details-modal" style="display:none;">
+        <button id="close-details-modal" class="details-close-btn" title="Close" aria-label="Close details">×</button>
+
+        <div class="details-header">
+            <div id="details-icon" class="details-icon">
+                <img src="default-icon.png" alt="App Icon" id="details-icon-img">
+            </div>
+            <div class="details-title-wrap">
+                <h2 id="details-name">Package Name</h2>
+                <div class="details-meta">
+                    <span id="details-id" class="details-id" title="Click to copy ID" style="cursor: pointer;"
+                        onclick="copyToClipboard(this.textContent)">package.id</span>
+                    <span id="details-version" class="details-version">v1.0.0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="details-body">
+            <div id="details-loading" class="details-loading">
+                <div class="spinner"></div>
+                <p>Loading details...</p>
+            </div>
+
+            <div id="details-content" style="display:none;">
+                <!-- Description -->
+                <div id="details-description-section" class="details-section">
+                    <h4>📝 Description</h4>
+                    <p id="details-description" class="details-description">No description available.</p>
+                </div>
+
+                <!-- Publisher Info -->
+                <div id="details-publisher-section" class="details-section">
+                    <h4>👤 Publisher Info</h4>
+                    <div class="details-grid">
+                        <div class="details-row" id="row-publisher">
+                            <span class="label">Publisher</span>
+                            <span id="details-publisher" class="value">-</span>
+                        </div>
+                        <div class="details-row" id="row-author">
+                            <span class="label">Author</span>
+                            <span id="details-author" class="value">-</span>
+                        </div>
+                        <div class="details-row" id="row-license">
+                            <span class="label">License</span>
+                            <span id="details-license" class="value">-</span>
+                        </div>
+                        <div class="details-row" id="row-copyright">
+                            <span class="label">Copyright</span>
+                            <span id="details-copyright" class="value">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tags -->
+                <div id="details-tags-section" class="details-section" style="display:none;">
+                    <h4>🏷️ Tags</h4>
+                    <div id="details-tags" class="details-tags"></div>
+                </div>
+
+                <!-- Installer Info -->
+                <div id="details-installer-section" class="details-section">
+                    <h4>📦 Installer</h4>
+                    <div class="details-grid">
+                        <div class="details-row" id="row-installer-type">
+                            <span class="label">Type</span>
+                            <span id="details-installer-type" class="value">-</span>
+                        </div>
+                        <div class="details-row details-url-row" id="row-installer-url">
+                            <span class="label">Download URL</span>
+                            <a id="details-installer-url" class="value details-link" href="#" target="_blank"
+                                rel="noopener">-</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Homepage -->
+                <div id="details-homepage-section" class="details-section" style="display:none;">
+                    <h4>🌐 Homepage</h4>
+                    <a id="details-homepage" class="details-homepage-link" href="#" target="_blank" rel="noopener">Visit
+                        Website</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="details-actions">
+            <button id="details-install-btn" class="btn btn-primary">Install</button>
+            <button id="details-download-btn" class="btn btn-secondary">Download</button>
+        </div>
+    </div>
+
     <!-- Minimized Tasks Tray -->
     <div id="minimized-tray" class="minimized-tray" style="display:none;"></div>
 
@@ -274,6 +369,12 @@
 
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
+
+    <!-- Connection Status Indicator -->
+    <div id="connection-status" class="connection-status">
+        <span class="status-icon"></span>
+        <span class="status-text"></span>
+    </div>
 
     <script src="script.js?v=final"></script>
 </body>
