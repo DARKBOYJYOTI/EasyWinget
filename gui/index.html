@@ -1,382 +1,525 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>EasyWinGet - Modern Package Manager</title>
+        <link rel="stylesheet" href="style.css" />
+        <link rel="icon" type="image/png" href="default-icon.png" />
+    </head>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EasyWinGet - Modern Package Manager</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="icon" type="image/png" href="default-icon.png">
-</head>
-
-<body>
-    <!-- Main Container -->
-    <div class="app-container">
-
-        <!-- Sidebar Navigation -->
-        <aside class="sidebar">
-            <div class="logo">
-                <div class="logo-title">
-                    <span class="logo-icon">📦</span>
-                    <h1>EasyWinGet</h1>
+    <body>
+        <!-- Main Container -->
+        <div class="app-container">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar">
+                <div class="logo">
+                    <div class="logo-title">
+                        <span class="logo-icon">📦</span>
+                        <h1>EasyWinGet</h1>
+                    </div>
+                    <div class="version-badge" id="app-version">v3.1.0</div>
                 </div>
-                <div class="version-badge" id="app-version">v3.1.0</div>
-            </div>
-            <div class="sidebar-separator"></div>
+                <div class="sidebar-separator"></div>
 
-            <nav class="nav-menu">
-                <button class="nav-btn active" data-view="search">
-                    <span class="icon">🔍</span>
-                    <span>Search</span>
-                </button>
-                <button class="nav-btn" data-view="installed">
-                    <span class="icon">💻</span>
-                    <span>Installed</span>
-                </button>
-                <button class="nav-btn" data-view="updates">
-                    <span class="icon">⬆️</span>
-                    <span>Updates</span>
-                    <span class="badge" id="update-badge" style="display:none;">0</span>
-                </button>
-                <button class="nav-btn" data-view="downloaded">
-                    <span class="icon">📂</span>
-                    <span>Downloaded</span>
-                    <span class="badge" id="downloaded-badge" style="display:none;">0</span>
-                </button>
-            </nav>
+                <nav class="nav-menu">
+                    <button class="nav-btn active" data-view="search">
+                        <span class="icon">🔍</span>
+                        <span>Search</span>
+                    </button>
+                    <button class="nav-btn" data-view="installed">
+                        <span class="icon">💻</span>
+                        <span>Installed</span>
+                    </button>
+                    <button class="nav-btn" data-view="updates">
+                        <span class="icon">⬆️</span>
+                        <span>Updates</span>
+                        <span class="badge" id="update-badge" style="display: none">0</span>
+                    </button>
+                    <button class="nav-btn" data-view="downloaded">
+                        <span class="icon">📂</span>
+                        <span>Downloaded</span>
+                        <span class="badge" id="downloaded-badge" style="display: none">0</span>
+                    </button>
+                </nav>
 
-            <div class="sidebar-footer">
-                <div class="creator">
-                    Created with <span class="heart">❤️</span> by Jyoti Karmakar
+                <div class="sidebar-footer">
+                    <div class="creator">
+                        Created with <span class="heart">❤️</span> by Jyoti Karmakar
+                    </div>
                 </div>
-            </div>
-        </aside>
+            </aside>
 
-        <!-- Main Content Area -->
-        <main class="content">
+            <!-- Main Content Area -->
+            <main class="content">
+                <!-- Search View -->
+                <div id="search-view" class="view active">
+                    <header class="view-header">
+                        <h2>Search Applications</h2>
+                        <p id="app-description">
+                            Find and install software from the WinGet catalog
+                        </p>
+                    </header>
 
-            <!-- Search View -->
-            <div id="search-view" class="view active">
-                <header class="view-header">
-                    <h2>Search Applications</h2>
-                    <p id="app-description">Find and install software from the WinGet catalog</p>
-                </header>
+                    <div id="search-welcome" class="search-welcome">
+                        <div class="welcome-icon">🔍</div>
+                        <h3>Discover Software</h3>
+                        <p>Search thousands of applications available through WinGet</p>
+                        <div class="welcome-features">
+                            <span>✨ Browse packages</span>
+                            <span>⚡ Quick install</span>
+                            <span>💾 Download installers</span>
+                        </div>
+                    </div>
 
-                <div id="search-welcome" class="search-welcome">
-                    <div class="welcome-icon">🔍</div>
-                    <h3>Discover Software</h3>
-                    <p>Search thousands of applications available through WinGet</p>
-                    <div class="welcome-features">
-                        <span>✨ Browse packages</span>
-                        <span>⚡ Quick install</span>
-                        <span>💾 Download installers</span>
+                    <div class="search-container">
+                        <div class="input-with-clear">
+                            <input
+                                type="text"
+                                id="search-input"
+                                placeholder="Search for apps (e.g., Chrome, VSCode, Git)..."
+                                autocomplete="off"
+                            />
+                            <button
+                                id="clear-search"
+                                class="clear-btn"
+                                style="display: none"
+                                title="Clear"
+                                aria-label="Clear search input"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <button id="search-btn" class="btn btn-primary">Search</button>
+                    </div>
+
+                    <div id="search-loading" class="loading-state" style="display: none">
+                        <div class="spinner"></div>
+                        <p>Searching...</p>
+                    </div>
+
+                    <div id="search-results" class="card-grid"></div>
+                    <div id="search-empty" class="empty-state" style="display: none">
+                        <div class="empty-icon">🔍</div>
+                        <h3>No results found</h3>
+                        <p>Try a different search term</p>
                     </div>
                 </div>
 
-                <div class="search-container">
-                    <div class="input-with-clear">
-                        <input type="text" id="search-input"
-                            placeholder="Search for apps (e.g., Chrome, VSCode, Git)..." autocomplete="off">
-                        <button id="clear-search" class="clear-btn" style="display:none;" title="Clear"
-                            aria-label="Clear search input">×</button>
+                <!-- Installed View -->
+                <div id="installed-view" class="view" style="display: none">
+                    <header class="view-header">
+                        <div>
+                            <h2 id="installed-header-title">Installed Applications</h2>
+                            <p>Manage your installed software</p>
+                        </div>
+                        <div style="display: flex; gap: 12px; align-items: center">
+                            <select id="sort-installed" class="sort-select">
+                                <option value="name">Sort by Name</option>
+                                <option value="name-desc">Sort by Name (Z-A)</option>
+                            </select>
+                            <button
+                                id="refresh-installed"
+                                class="btn-icon"
+                                title="Refresh"
+                                aria-label="Refresh installed apps list"
+                            >
+                                <svg
+                                    class="icon-svg"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke-width="2"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </header>
+
+                    <div class="search-container" style="margin-bottom: 24px">
+                        <div class="input-with-clear">
+                            <input
+                                type="text"
+                                id="filter-installed"
+                                placeholder="Filter installed apps..."
+                                autocomplete="off"
+                            />
+                            <button
+                                id="clear-filter-installed"
+                                class="clear-btn"
+                                style="display: none"
+                                title="Clear"
+                                aria-label="Clear filter"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <button id="filter-installed-btn" class="btn btn-secondary">Filter</button>
                     </div>
-                    <button id="search-btn" class="btn btn-primary">Search</button>
-                </div>
 
-                <div id="search-loading" class="loading-state" style="display:none;">
-                    <div class="spinner"></div>
-                    <p>Searching...</p>
-                </div>
-
-                <div id="search-results" class="card-grid"></div>
-                <div id="search-empty" class="empty-state" style="display:none;">
-                    <div class="empty-icon">🔍</div>
-                    <h3>No results found</h3>
-                    <p>Try a different search term</p>
-                </div>
-            </div>
-
-            <!-- Installed View -->
-            <div id="installed-view" class="view" style="display:none;">
-                <header class="view-header">
-                    <div>
-                        <h2 id="installed-header-title">Installed Applications</h2>
-                        <p>Manage your installed software</p>
+                    <div id="installed-loading" class="loading-state" style="display: none">
+                        <div class="spinner"></div>
+                        <p>Loading installed apps...</p>
                     </div>
-                    <div style="display: flex; gap: 12px; align-items: center;">
-                        <select id="sort-installed" class="sort-select">
-                            <option value="name">Sort by Name</option>
-                            <option value="name-desc">Sort by Name (Z-A)</option>
-                        </select>
-                        <button id="refresh-installed" class="btn-icon" title="Refresh"
-                            aria-label="Refresh installed apps list">
-                            <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+
+                    <div id="installed-list" class="list-container"></div>
+                </div>
+
+                <!-- Updates View -->
+                <div id="updates-view" class="view" style="display: none">
+                    <header class="view-header">
+                        <div>
+                            <h2 id="updates-header-title">Available Updates</h2>
+                            <p>Keep your software up to date</p>
+                        </div>
+                        <div style="display: flex; gap: 12px; align-items: center">
+                            <button
+                                id="update-all-btn"
+                                class="btn btn-primary"
+                                style="display: none"
+                            >
+                                Update All
+                            </button>
+                            <button id="view-ignored-btn" class="btn btn-secondary">
+                                Ignored Apps
+                            </button>
+                            <button
+                                id="refresh-updates"
+                                class="btn-icon"
+                                title="Check for updates"
+                                aria-label="Check for available updates"
+                            >
+                                <svg
+                                    class="icon-svg"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke-width="2"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </header>
+
+                    <div class="search-container" style="margin-bottom: 24px">
+                        <div class="input-with-clear">
+                            <input
+                                type="text"
+                                id="filter-updates"
+                                placeholder="Filter updates..."
+                                autocomplete="off"
+                            />
+                            <button
+                                id="clear-filter-updates"
+                                class="clear-btn"
+                                style="display: none"
+                                title="Clear"
+                                aria-label="Clear filter"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <button id="filter-updates-btn" class="btn btn-secondary">Filter</button>
+                    </div>
+
+                    <div id="updates-loading" class="loading-state" style="display: none">
+                        <div class="spinner"></div>
+                        <p>Checking for updates...</p>
+                    </div>
+
+                    <div id="updates-grid" class="card-grid"></div>
+                </div>
+
+                <!-- Downloaded View -->
+                <div id="view-downloaded" class="view" style="display: none">
+                    <div class="view-header">
+                        <div>
+                            <h2>Downloaded Files</h2>
+                            <p>Manage installers in your Downloads folder</p>
+                        </div>
+                        <button
+                            id="refresh-downloaded"
+                            class="btn-icon"
+                            title="Refresh"
+                            aria-label="Refresh downloaded files list"
+                        >
+                            <svg
+                                class="icon-svg"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke-width="2"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+                                />
                             </svg>
                         </button>
                     </div>
-                </header>
 
-                <div class="search-container" style="margin-bottom:24px;">
-                    <div class="input-with-clear">
-                        <input type="text" id="filter-installed" placeholder="Filter installed apps..."
-                            autocomplete="off">
-                        <button id="clear-filter-installed" class="clear-btn" style="display:none;" title="Clear"
-                            aria-label="Clear filter">×</button>
+                    <div id="downloaded-list" class="list-container">
+                        <!-- Files will be injected here -->
                     </div>
-                    <button id="filter-installed-btn" class="btn btn-secondary">Filter</button>
-                </div>
 
-                <div id="installed-loading" class="loading-state" style="display:none;">
-                    <div class="spinner"></div>
-                    <p>Loading installed apps...</p>
-                </div>
+                    <div id="downloaded-empty" class="empty-state" style="display: none">
+                        <div class="empty-icon">📂</div>
+                        <h3>No downloads found</h3>
+                        <p>Files you download will appear here.</p>
+                    </div>
 
-                <div id="installed-list" class="list-container"></div>
+                    <div id="downloaded-loading" class="loading-state" style="display: none">
+                        <div class="spinner"></div>
+                        <p>Scanning downloads...</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Custom Confirm Dialog -->
+        <div id="confirm-dialog" class="confirm-overlay" style="display: none">
+            <div class="confirm-box">
+                <div class="confirm-icon">⚠️</div>
+                <h3 id="confirm-title">Confirm Action</h3>
+                <p id="confirm-message">Are you sure?</p>
+                <div class="confirm-actions">
+                    <button id="confirm-cancel" class="btn btn-secondary">Cancel</button>
+                    <button id="confirm-ok" class="btn btn-primary">Confirm</button>
+                </div>
             </div>
+        </div>
 
-            <!-- Updates View -->
-            <div id="updates-view" class="view" style="display:none;">
-                <header class="view-header">
-                    <div>
-                        <h2 id="updates-header-title">Available Updates</h2>
-                        <p>Keep your software up to date</p>
-                    </div>
-                    <div style="display: flex; gap: 12px; align-items: center;">
-                        <button id="update-all-btn" class="btn btn-primary" style="display: none;">Update All</button>
-                        <button id="view-ignored-btn" class="btn btn-secondary">Ignored Apps</button>
-                        <button id="refresh-updates" class="btn-icon" title="Check for updates"
-                            aria-label="Check for available updates">
-                            <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                            </svg>
-                        </button>
-                    </div>
-                </header>
+        <!-- Modal Backdrop -->
+        <div id="modal-backdrop" class="modal-backdrop" style="display: none"></div>
 
-                <div class="search-container" style="margin-bottom:24px;">
-                    <div class="input-with-clear">
-                        <input type="text" id="filter-updates" placeholder="Filter updates..." autocomplete="off">
-                        <button id="clear-filter-updates" class="clear-btn" style="display:none;" title="Clear"
-                            aria-label="Clear filter">×</button>
-                    </div>
-                    <button id="filter-updates-btn" class="btn btn-secondary">Filter</button>
-                </div>
-
-                <div id="updates-loading" class="loading-state" style="display:none;">
-                    <div class="spinner"></div>
-                    <p>Checking for updates...</p>
-                </div>
-
-                <div id="updates-grid" class="card-grid"></div>
-            </div>
-
-            <!-- Downloaded View -->
-            <div id="view-downloaded" class="view" style="display: none;">
-                <div class="view-header">
-                    <div>
-                        <h2>Downloaded Files</h2>
-                        <p>Manage installers in your Downloads folder</p>
-                    </div>
-                    <button id="refresh-downloaded" class="btn-icon" title="Refresh"
-                        aria-label="Refresh downloaded files list">
-                        <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                            stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                        </svg>
+        <!-- Task Modal -->
+        <div id="task-modal" class="task-modal" style="display: none">
+            <div class="modal-header">
+                <h3 id="modal-title">Task Progress</h3>
+                <div class="modal-controls">
+                    <button
+                        id="minimize-modal"
+                        class="modal-btn"
+                        title="Minimize"
+                        aria-label="Minimize task window"
+                    >
+                        −
+                    </button>
+                    <button
+                        id="close-modal"
+                        class="modal-btn"
+                        title="Close"
+                        aria-label="Close task window"
+                    >
+                        ×
                     </button>
                 </div>
-
-                <div id="downloaded-list" class="list-container">
-                    <!-- Files will be injected here -->
+            </div>
+            <div class="modal-progress">
+                <div class="progress-bar-container">
+                    <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
                 </div>
+                <div id="progress-text" class="progress-text">Starting...</div>
+            </div>
+            <div id="modal-output" class="modal-output"></div>
+            <div class="modal-actions" id="modal-actions" style="display: none">
+                <button id="cancel-task-btn" class="btn btn-danger">Cancel</button>
+            </div>
+        </div>
 
-                <div id="downloaded-empty" class="empty-state" style="display: none;">
-                    <div class="empty-icon">📂</div>
-                    <h3>No downloads found</h3>
-                    <p>Files you download will appear here.</p>
+        <!-- Ignored Apps Modal -->
+        <div id="ignored-modal" class="modal-backdrop" style="display: none; z-index: 2000">
+            <div
+                class="task-modal"
+                style="display: flex; flex-direction: column; height: 60vh; max-height: 500px"
+            >
+                <div class="modal-header">
+                    <h3>Ignored Updates</h3>
+                    <div class="modal-controls">
+                        <button
+                            id="close-ignored-modal"
+                            class="modal-btn"
+                            title="Close"
+                            aria-label="Close ignored apps window"
+                        >
+                            ×
+                        </button>
+                    </div>
                 </div>
+                <div
+                    id="ignored-list"
+                    class="modal-output"
+                    style="
+                        flex: 1;
+                        overflow-y: auto;
+                        padding: 15px;
+                        display: flex;
+                        flex-direction: column;
+                    "
+                >
+                    <!-- List items -->
+                </div>
+                <div style="padding: 15px; border-top: 1px solid var(--border)">
+                    <p style="font-size: 0.8rem; color: var(--text-secondary)">
+                        Ignored apps will not appear in the updates list.
+                    </p>
+                </div>
+            </div>
+        </div>
 
-                <div id="downloaded-loading" class="loading-state" style="display: none;">
+        <!-- Package Details Modal -->
+        <div
+            id="details-modal-backdrop"
+            class="modal-backdrop"
+            style="display: none; z-index: 2500"
+        ></div>
+        <div id="details-modal" class="details-modal" style="display: none">
+            <button
+                id="close-details-modal"
+                class="details-close-btn"
+                title="Close"
+                aria-label="Close details"
+            >
+                ×
+            </button>
+
+            <div class="details-header">
+                <div id="details-icon" class="details-icon">
+                    <img src="default-icon.png" alt="App Icon" id="details-icon-img" />
+                </div>
+                <div class="details-title-wrap">
+                    <h2 id="details-name">Package Name</h2>
+                    <div class="details-meta">
+                        <span
+                            id="details-id"
+                            class="details-id"
+                            title="Click to copy ID"
+                            style="cursor: pointer"
+                            onclick="copyToClipboard(this.textContent)"
+                            >package.id</span
+                        >
+                        <span id="details-version" class="details-version">v1.0.0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="details-body">
+                <div id="details-loading" class="details-loading">
                     <div class="spinner"></div>
-                    <p>Scanning downloads...</p>
-                </div>
-            </div>
-
-        </main>
-    </div>
-
-    <!-- Custom Confirm Dialog -->
-    <div id="confirm-dialog" class="confirm-overlay" style="display:none;">
-        <div class="confirm-box">
-            <div class="confirm-icon">⚠️</div>
-            <h3 id="confirm-title">Confirm Action</h3>
-            <p id="confirm-message">Are you sure?</p>
-            <div class="confirm-actions">
-                <button id="confirm-cancel" class="btn btn-secondary">Cancel</button>
-                <button id="confirm-ok" class="btn btn-primary">Confirm</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal Backdrop -->
-    <div id="modal-backdrop" class="modal-backdrop" style="display:none;"></div>
-
-    <!-- Task Modal -->
-    <div id="task-modal" class="task-modal" style="display:none;">
-        <div class="modal-header">
-            <h3 id="modal-title">Task Progress</h3>
-            <div class="modal-controls">
-                <button id="minimize-modal" class="modal-btn" title="Minimize"
-                    aria-label="Minimize task window">−</button>
-                <button id="close-modal" class="modal-btn" title="Close" aria-label="Close task window">×</button>
-            </div>
-        </div>
-        <div class="modal-progress">
-            <div class="progress-bar-container">
-                <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
-            </div>
-            <div id="progress-text" class="progress-text">Starting...</div>
-        </div>
-        <div id="modal-output" class="modal-output"></div>
-        <div class="modal-actions" id="modal-actions" style="display:none;">
-            <button id="cancel-task-btn" class="btn btn-danger">Cancel</button>
-        </div>
-    </div>
-
-    <!-- Ignored Apps Modal -->
-    <div id="ignored-modal" class="modal-backdrop" style="display:none; z-index: 2000;">
-        <div class="task-modal" style="display:flex; flex-direction:column; height: 60vh; max-height: 500px;">
-            <div class="modal-header">
-                <h3>Ignored Updates</h3>
-                <div class="modal-controls">
-                    <button id="close-ignored-modal" class="modal-btn" title="Close"
-                        aria-label="Close ignored apps window">×</button>
-                </div>
-            </div>
-            <div id="ignored-list" class="modal-output"
-                style="flex:1; overflow-y:auto; padding: 15px; display: flex; flex-direction: column;">
-                <!-- List items -->
-            </div>
-            <div style="padding: 15px; border-top: 1px solid var(--border);">
-                <p style="font-size: 0.8rem; color: var(--text-secondary);">Ignored apps will not appear in the updates
-                    list.</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Package Details Modal -->
-    <div id="details-modal-backdrop" class="modal-backdrop" style="display:none; z-index: 2500;"></div>
-    <div id="details-modal" class="details-modal" style="display:none;">
-        <button id="close-details-modal" class="details-close-btn" title="Close" aria-label="Close details">×</button>
-
-        <div class="details-header">
-            <div id="details-icon" class="details-icon">
-                <img src="default-icon.png" alt="App Icon" id="details-icon-img">
-            </div>
-            <div class="details-title-wrap">
-                <h2 id="details-name">Package Name</h2>
-                <div class="details-meta">
-                    <span id="details-id" class="details-id" title="Click to copy ID" style="cursor: pointer;"
-                        onclick="copyToClipboard(this.textContent)">package.id</span>
-                    <span id="details-version" class="details-version">v1.0.0</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="details-body">
-            <div id="details-loading" class="details-loading">
-                <div class="spinner"></div>
-                <p>Loading details...</p>
-            </div>
-
-            <div id="details-content" style="display:none;">
-                <!-- Description -->
-                <div id="details-description-section" class="details-section">
-                    <h4>📝 Description</h4>
-                    <p id="details-description" class="details-description">No description available.</p>
+                    <p>Loading details...</p>
                 </div>
 
-                <!-- Publisher Info -->
-                <div id="details-publisher-section" class="details-section">
-                    <h4>👤 Publisher Info</h4>
-                    <div class="details-grid">
-                        <div class="details-row" id="row-publisher">
-                            <span class="label">Publisher</span>
-                            <span id="details-publisher" class="value">-</span>
-                        </div>
-                        <div class="details-row" id="row-author">
-                            <span class="label">Author</span>
-                            <span id="details-author" class="value">-</span>
-                        </div>
-                        <div class="details-row" id="row-license">
-                            <span class="label">License</span>
-                            <span id="details-license" class="value">-</span>
-                        </div>
-                        <div class="details-row" id="row-copyright">
-                            <span class="label">Copyright</span>
-                            <span id="details-copyright" class="value">-</span>
+                <div id="details-content" style="display: none">
+                    <!-- Description -->
+                    <div id="details-description-section" class="details-section">
+                        <h4>📝 Description</h4>
+                        <p id="details-description" class="details-description">
+                            No description available.
+                        </p>
+                    </div>
+
+                    <!-- Publisher Info -->
+                    <div id="details-publisher-section" class="details-section">
+                        <h4>👤 Publisher Info</h4>
+                        <div class="details-grid">
+                            <div class="details-row" id="row-publisher">
+                                <span class="label">Publisher</span>
+                                <span id="details-publisher" class="value">-</span>
+                            </div>
+                            <div class="details-row" id="row-author">
+                                <span class="label">Author</span>
+                                <span id="details-author" class="value">-</span>
+                            </div>
+                            <div class="details-row" id="row-license">
+                                <span class="label">License</span>
+                                <span id="details-license" class="value">-</span>
+                            </div>
+                            <div class="details-row" id="row-copyright">
+                                <span class="label">Copyright</span>
+                                <span id="details-copyright" class="value">-</span>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Tags -->
-                <div id="details-tags-section" class="details-section" style="display:none;">
-                    <h4>🏷️ Tags</h4>
-                    <div id="details-tags" class="details-tags"></div>
-                </div>
+                    <!-- Tags -->
+                    <div id="details-tags-section" class="details-section" style="display: none">
+                        <h4>🏷️ Tags</h4>
+                        <div id="details-tags" class="details-tags"></div>
+                    </div>
 
-                <!-- Installer Info -->
-                <div id="details-installer-section" class="details-section">
-                    <h4>📦 Installer</h4>
-                    <div class="details-grid">
-                        <div class="details-row" id="row-installer-type">
-                            <span class="label">Type</span>
-                            <span id="details-installer-type" class="value">-</span>
-                        </div>
-                        <div class="details-row details-url-row" id="row-installer-url">
-                            <span class="label">Download URL</span>
-                            <a id="details-installer-url" class="value details-link" href="#" target="_blank"
-                                rel="noopener">-</a>
+                    <!-- Installer Info -->
+                    <div id="details-installer-section" class="details-section">
+                        <h4>📦 Installer</h4>
+                        <div class="details-grid">
+                            <div class="details-row" id="row-installer-type">
+                                <span class="label">Type</span>
+                                <span id="details-installer-type" class="value">-</span>
+                            </div>
+                            <div class="details-row details-url-row" id="row-installer-url">
+                                <span class="label">Download URL</span>
+                                <a
+                                    id="details-installer-url"
+                                    class="value details-link"
+                                    href="#"
+                                    target="_blank"
+                                    rel="noopener"
+                                    >-</a
+                                >
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Homepage -->
-                <div id="details-homepage-section" class="details-section" style="display:none;">
-                    <h4>🌐 Homepage</h4>
-                    <a id="details-homepage" class="details-homepage-link" href="#" target="_blank" rel="noopener">Visit
-                        Website</a>
+                    <!-- Homepage -->
+                    <div
+                        id="details-homepage-section"
+                        class="details-section"
+                        style="display: none"
+                    >
+                        <h4>🌐 Homepage</h4>
+                        <a
+                            id="details-homepage"
+                            class="details-homepage-link"
+                            href="#"
+                            target="_blank"
+                            rel="noopener"
+                            >Visit Website</a
+                        >
+                    </div>
                 </div>
+            </div>
+
+            <div class="details-actions">
+                <button id="details-install-btn" class="btn btn-primary">Install</button>
+                <button id="details-download-btn" class="btn btn-secondary">Download</button>
             </div>
         </div>
 
-        <div class="details-actions">
-            <button id="details-install-btn" class="btn btn-primary">Install</button>
-            <button id="details-download-btn" class="btn btn-secondary">Download</button>
+        <!-- Minimized Tasks Tray -->
+        <div id="minimized-tray" class="minimized-tray" style="display: none"></div>
+
+        <!-- Toast Container -->
+        <div id="toast-container" class="toast-container"></div>
+
+        <!-- Connection Status Indicator -->
+        <div id="connection-status" class="connection-status">
+            <span class="status-icon"></span>
+            <span class="status-text"></span>
         </div>
-    </div>
 
-    <!-- Minimized Tasks Tray -->
-    <div id="minimized-tray" class="minimized-tray" style="display:none;"></div>
-
-
-
-    <!-- Toast Container -->
-    <div id="toast-container" class="toast-container"></div>
-
-    <!-- Connection Status Indicator -->
-    <div id="connection-status" class="connection-status">
-        <span class="status-icon"></span>
-        <span class="status-text"></span>
-    </div>
-
-    <script src="script.js?v=final"></script>
-</body>
-
+        <script src="script.js?v=final"></script>
+    </body>
 </html>

@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { open } = require('fs/promises');
 const { spawn, exec } = require('child_process');
 
 const winget = require('./utils/winget');
@@ -27,7 +26,6 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // --- HEARTBEAT & AUTO-SHUTDOWN REMOVED ---
 // Server now runs until manually stopped
-
 
 // Static Files
 app.use(express.static(path.join(__dirname, 'gui')));
@@ -73,17 +71,17 @@ app.get('/api/refresh-installed', async (req, res) => {
 app.get('/api/updates', async (req, res) => {
     const cached = cache.load('updates');
     const ignored = cache.load('ignored') || [];
-    const ignoredIds = (Array.isArray(ignored) ? ignored : []).map(i => i.id);
+    const ignoredIds = (Array.isArray(ignored) ? ignored : []).map((i) => i.id);
 
     if (cached) {
-        const filtered = cached.filter(u => !ignoredIds.includes(u.id));
+        const filtered = cached.filter((u) => !ignoredIds.includes(u.id));
         return res.json({ success: true, updates: filtered });
     }
 
     try {
         const updates = await winget.listUpdates();
         cache.save('updates', updates);
-        const filtered = updates.filter(u => !ignoredIds.includes(u.id));
+        const filtered = updates.filter((u) => !ignoredIds.includes(u.id));
         res.json({ success: true, updates: filtered });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -96,8 +94,8 @@ app.get('/api/refresh-updates', async (req, res) => {
         cache.save('updates', updates);
 
         const ignored = cache.load('ignored') || [];
-        const ignoredIds = (Array.isArray(ignored) ? ignored : []).map(i => i.id);
-        const filtered = updates.filter(u => !ignoredIds.includes(u.id));
+        const ignoredIds = (Array.isArray(ignored) ? ignored : []).map((i) => i.id);
+        const filtered = updates.filter((u) => !ignoredIds.includes(u.id));
 
         res.json({ success: true, updates: filtered });
     } catch (e) {
@@ -116,7 +114,7 @@ app.get('/api/ignore', (req, res) => {
     if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });
 
     let ignored = cache.load('ignored') || [];
-    if (!ignored.find(i => i.id === id)) {
+    if (!ignored.find((i) => i.id === id)) {
         ignored.push({ id, name });
         cache.save('ignored', ignored);
     }
@@ -128,7 +126,7 @@ app.get('/api/unignore', (req, res) => {
     if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });
 
     let ignored = cache.load('ignored') || [];
-    ignored = ignored.filter(i => i.id !== id);
+    ignored = ignored.filter((i) => i.id !== id);
     cache.save('ignored', ignored);
     res.json({ success: true, message: `Unignored ${id}` });
 });
@@ -140,9 +138,10 @@ async function scrapeIconFromUrl(targetUrl) {
         const domain = targetUrl.startsWith('http') ? targetUrl : `https://${targetUrl}`;
         const response = await fetch(domain, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                'User-Agent':
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             },
-            signal: AbortSignal.timeout(4000)
+            signal: AbortSignal.timeout(4000),
         });
 
         if (!response.ok) return null;
@@ -161,7 +160,7 @@ async function scrapeIconFromUrl(targetUrl) {
                 bytesRead += value.length;
                 if (bytesRead > LIMIT || html.includes('</head>')) break;
             }
-        } catch (e) { }
+        } catch (e) {}
 
         try {
             while (true) {
@@ -171,8 +170,10 @@ async function scrapeIconFromUrl(targetUrl) {
                 bytesRead += value.length;
                 if (bytesRead > LIMIT || html.includes('</head>')) break;
             }
-        } catch (e) { }
-        try { reader.cancel(); } catch (e) { }
+        } catch (e) {}
+        try {
+            reader.cancel();
+        } catch (e) {}
 
         const findAttr = (regex) => {
             const match = html.match(regex);
@@ -182,18 +183,29 @@ async function scrapeIconFromUrl(targetUrl) {
         // Multiple patterns to catch different HTML structures
         // Pattern 1: apple-touch-icon (any attribute order)
         let iconUrl = findAttr(/<link[^>]*rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i);
-        if (!iconUrl) iconUrl = findAttr(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']apple-touch-icon["']/i);
+        if (!iconUrl)
+            iconUrl = findAttr(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']apple-touch-icon["']/i);
 
         // Pattern 2: icon with sizes
-        if (!iconUrl) iconUrl = findAttr(/<link[^>]*rel=["']icon["'][^>]*href=["']([^"']+)["'][^>]*sizes=["'](?:192|180|128|96|64|48|32)/i);
+        if (!iconUrl)
+            iconUrl = findAttr(
+                /<link[^>]*rel=["']icon["'][^>]*href=["']([^"']+)["'][^>]*sizes=["'](?:192|180|128|96|64|48|32)/i
+            );
         if (!iconUrl) iconUrl = findAttr(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']icon["']/i);
 
         // Pattern 3: shortcut icon
-        if (!iconUrl) iconUrl = findAttr(/<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']+)["']/i);
-        if (!iconUrl) iconUrl = findAttr(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["'](?:shortcut )?icon["']/i);
+        if (!iconUrl)
+            iconUrl = findAttr(
+                /<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']+)["']/i
+            );
+        if (!iconUrl)
+            iconUrl = findAttr(
+                /<link[^>]*href=["']([^"']+)["'][^>]*rel=["'](?:shortcut )?icon["']/i
+            );
 
         // Pattern 4: Any link with icon in rel
-        if (!iconUrl) iconUrl = findAttr(/<link[^>]*rel=["'][^"']*icon[^"']*["'][^>]*href=["']([^"']+)["']/i);
+        if (!iconUrl)
+            iconUrl = findAttr(/<link[^>]*rel=["'][^"']*icon[^"']*["'][^>]*href=["']([^"']+)["']/i);
 
         if (iconUrl) {
             if (!iconUrl.startsWith('http')) {
@@ -211,14 +223,18 @@ async function scrapeIconFromUrl(targetUrl) {
             try {
                 const iconRes = await fetch(iconUrl, {
                     method: 'HEAD',
-                    signal: AbortSignal.timeout(2000)
+                    signal: AbortSignal.timeout(2000),
                 });
                 const contentType = iconRes.headers.get('content-type') || '';
                 // Only accept if it looks like an image
-                if (iconRes.ok && (contentType.includes('image') || iconUrl.match(/\.(ico|png|jpg|jpeg|svg|gif|webp)$/i))) {
+                if (
+                    iconRes.ok &&
+                    (contentType.includes('image') ||
+                        iconUrl.match(/\.(ico|png|jpg|jpeg|svg|gif|webp)$/i))
+                ) {
                     return iconUrl;
                 }
-            } catch (e) { }
+            } catch (e) {}
             // If validation failed, don't return this URL
         }
 
@@ -229,14 +245,13 @@ async function scrapeIconFromUrl(targetUrl) {
             // Quick HEAD check to see if it exists
             const faviconRes = await fetch(faviconUrl, {
                 method: 'HEAD',
-                signal: AbortSignal.timeout(2000)
+                signal: AbortSignal.timeout(2000),
             });
             if (faviconRes.ok) {
                 return faviconUrl;
             }
-        } catch (e) { }
-
-    } catch (e) { }
+        } catch (e) {}
+    } catch (e) {}
     return null;
 }
 
@@ -251,10 +266,8 @@ app.get('/api/manifest', async (req, res) => {
 
     // Validate ID format - reject obviously malformed IDs
     // Valid winget IDs can start with letters or numbers (e.g., 7gxycn08.WinGetCreateGui)
-    if (id.length < 3 ||
-        id.includes(' ') ||
-        id.includes('%20') ||
-        /^\./.test(id)) {  // Only reject if starts with dot
+    if (id.length < 3 || id.includes(' ') || id.includes('%20') || /^\./.test(id)) {
+        // Only reject if starts with dot
         return res.json({ success: false, reason: 'invalid_id' });
     }
 
@@ -274,7 +287,7 @@ app.get('/api/manifest', async (req, res) => {
             responseSent = true;
             try {
                 res.json(data);
-            } catch (e) { }
+            } catch (e) {}
         };
 
         try {
@@ -296,8 +309,12 @@ app.get('/api/manifest', async (req, res) => {
             }
 
             // Move GitHub URLs to end (they usually have GitHub's favicon, not app's)
-            const nonGithubUrls = allUrls.filter(u => !u.includes('github.com') && !u.includes('github.io'));
-            const githubUrls = allUrls.filter(u => u.includes('github.com') || u.includes('github.io'));
+            const nonGithubUrls = allUrls.filter(
+                (u) => !u.includes('github.com') && !u.includes('github.io')
+            );
+            const githubUrls = allUrls.filter(
+                (u) => u.includes('github.com') || u.includes('github.io')
+            );
             const sortedUrls = [...nonGithubUrls, ...githubUrls];
 
             // Helper: Get root domain from hostname (remove subdomain)
@@ -325,7 +342,10 @@ app.get('/api/manifest', async (req, res) => {
                     const rootDomain = getRootDomain(hostname);
 
                     // Track best root domain (prefer non-CDN domains)
-                    if (!bestRootDomain || (!hostname.includes('cdn') && !hostname.includes('download'))) {
+                    if (
+                        !bestRootDomain ||
+                        (!hostname.includes('cdn') && !hostname.includes('download'))
+                    ) {
                         bestRootDomain = rootDomain;
                     }
 
@@ -351,7 +371,7 @@ app.get('/api/manifest', async (req, res) => {
                             iconUrl = await scrapeIconFromUrl(scrapeUrl);
                         }
                     }
-                } catch (e) { }
+                } catch (e) {}
             }
 
             // 4. FALLBACK: If all scraping failed but we have a root domain, use Google Favicon API
@@ -409,7 +429,7 @@ app.get('/api/details', async (req, res) => {
                 tags: [],
                 installerType: '',
                 installerUrl: '',
-                installerSha256: ''
+                installerSha256: '',
             };
 
             let currentSection = '';
@@ -538,7 +558,9 @@ app.get('/api/search', async (req, res) => {
     if (activeManifestJobs.size > 0) {
         // console.log(`[Search] New search detected. Killing ${activeManifestJobs.size} pending manifest jobs.`);
         for (const child of activeManifestJobs) {
-            try { child.kill(); } catch (e) { }
+            try {
+                child.kill();
+            } catch (e) {}
         }
         activeManifestJobs.clear();
     }
@@ -566,7 +588,14 @@ app.get('/api/install', (req, res) => {
     if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });
 
     // args: install --id <id> ...
-    const jobId = jobs.startJob('winget', ['install', '--id', id, '--accept-source-agreements', '--accept-package-agreements', '--verbose']);
+    const jobId = jobs.startJob('winget', [
+        'install',
+        '--id',
+        id,
+        '--accept-source-agreements',
+        '--accept-package-agreements',
+        '--verbose',
+    ]);
     res.json({ success: true, jobId });
 });
 
@@ -581,12 +610,21 @@ app.get('/api/uninstall', (req, res) => {
     // The name comes from the GUI and is the actual display name
     const searchName = name || id.split('.').pop();
 
-    const jobId = jobs.startJob('powershell', ['-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-AppName', searchName, '-PackageId', id]);
+    const jobId = jobs.startJob('powershell', [
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        scriptPath,
+        '-AppName',
+        searchName,
+        '-PackageId',
+        id,
+    ]);
 
     // Invalidate installed cache
     try {
         fs.unlinkSync(cache.FILES.installed);
-    } catch (e) { }
+    } catch (e) {}
 
     res.json({ success: true, jobId });
 });
@@ -595,7 +633,14 @@ app.get('/api/update', (req, res) => {
     const { id } = req.query;
     if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });
 
-    const jobId = jobs.startJob('winget', ['upgrade', '--id', id, '--accept-source-agreements', '--accept-package-agreements', '--verbose']);
+    const jobId = jobs.startJob('winget', [
+        'upgrade',
+        '--id',
+        id,
+        '--accept-source-agreements',
+        '--accept-package-agreements',
+        '--verbose',
+    ]);
     res.json({ success: true, jobId });
 });
 
@@ -617,7 +662,15 @@ app.get('/api/download', (req, res) => {
         fs.mkdirSync(targetDir, { recursive: true });
     }
 
-    const jobId = jobs.startJob('winget', ['download', '--id', id, '--download-directory', targetDir, '--accept-source-agreements', '--verbose']);
+    const jobId = jobs.startJob('winget', [
+        'download',
+        '--id',
+        id,
+        '--download-directory',
+        targetDir,
+        '--accept-source-agreements',
+        '--verbose',
+    ]);
     res.json({ success: true, jobId });
 });
 
@@ -628,12 +681,12 @@ app.get('/api/status', (req, res) => {
     const job = jobs.getJob(id);
     if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
 
-    const output = jobs.getJobOutput(id) || "";
+    const output = jobs.getJobOutput(id) || '';
 
     res.json({
         success: job.done && job.exitCode === 0,
         done: job.done,
-        output: output
+        output: output,
     });
 });
 
@@ -662,9 +715,9 @@ function processIconQueue() {
     const ps = spawn('powershell', args);
 
     let data = '';
-    ps.stdout.on('data', chunk => data += chunk.toString());
+    ps.stdout.on('data', (chunk) => (data += chunk.toString()));
 
-    ps.on('close', code => {
+    ps.on('close', (code) => {
         clearTimeout(timeout);
         const trimmed = data.trim();
         if (code === 0 && trimmed.length > 0) {
@@ -676,7 +729,10 @@ function processIconQueue() {
             } catch (e) {
                 if (!res.headersSent) {
                     // Return generic transparent pixel with missing header
-                    const empty = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+                    const empty = Buffer.from(
+                        'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+                        'base64'
+                    );
                     res.set('X-Icon-Missing', 'true');
                     res.type('image/gif').send(empty);
                 }
@@ -685,11 +741,14 @@ function processIconQueue() {
             // Negative Cache: write a placeholder
             try {
                 fs.writeFileSync(iconPath + '.404', '');
-            } catch (e) { }
+            } catch (e) {}
 
             if (!res.headersSent) {
                 // Return generic transparent pixel with missing header
-                const empty = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+                const empty = Buffer.from(
+                    'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+                    'base64'
+                );
                 res.set('X-Icon-Missing', 'true');
                 res.type('image/gif').send(empty);
             }
@@ -701,11 +760,14 @@ function processIconQueue() {
 
     ps.on('error', (err) => {
         clearTimeout(timeout);
-        console.error("Spawn error:", err);
-        // Also negative cache on spawn errors? Maybe temporary? 
+        console.error('Spawn error:', err);
+        // Also negative cache on spawn errors? Maybe temporary?
         // Let's assume spawn errors might be transient or system load, but for now we won't cache them.
         if (!res.headersSent) {
-            const empty = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+            const empty = Buffer.from(
+                'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+                'base64'
+            );
             res.set('X-Icon-Missing', 'true');
             res.type('image/gif').send(empty);
         }
@@ -714,20 +776,22 @@ function processIconQueue() {
     });
 }
 
-
 // --- ICONS (LOCAL) ---
 app.get('/api/icon', async (req, res) => {
     const { id, name, file } = req.query; // 'file' is the relative path from Downloads
 
     try {
-        fs.appendFileSync(path.join(__dirname, 'server_debug.log'), `REQ: ${JSON.stringify(req.query)}\n`);
-    } catch (e) { }
+        fs.appendFileSync(
+            path.join(__dirname, 'server_debug.log'),
+            `REQ: ${JSON.stringify(req.query)}\n`
+        );
+    } catch (e) {}
 
-    if (!name && !file && !id) return res.status(400).send("No identifier provided");
+    if (!name && !file && !id) return res.status(400).send('No identifier provided');
 
     // Cache Key: ID > Name > File
     // Sanitize key for filesystem
-    const rawKey = (id || name || file);
+    const rawKey = id || name || file;
     const cacheKey = rawKey.replace(/[^a-zA-Z0-9.-]/g, '_');
     const iconPath = path.join(__dirname, 'data', 'icons', `${cacheKey}.png`);
     const iconDir = path.dirname(iconPath);
@@ -742,7 +806,10 @@ app.get('/api/icon', async (req, res) => {
 
     // Check Negative Cache
     if (fs.existsSync(iconPath + '.404')) {
-        const empty = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+        const empty = Buffer.from(
+            'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+            'base64'
+        );
         res.set('X-Icon-Missing', 'true');
         return res.type('image/gif').send(empty);
     }
@@ -785,13 +852,12 @@ app.get('/api/icon', async (req, res) => {
     processIconQueue();
 });
 
-
 // --- DOWNLOADED FILES ---
 function getFilesRecursive(dir, baseDir = dir) {
     let results = [];
     try {
         const list = fs.readdirSync(dir);
-        list.forEach(file => {
+        list.forEach((file) => {
             // Skip "Dependencies" folder
             if (file.toLowerCase() === 'dependencies') return;
 
@@ -806,13 +872,15 @@ function getFilesRecursive(dir, baseDir = dir) {
                             Name: path.relative(baseDir, fullPath),
                             Length: stat.size,
                             // Ensure valid ISO string
-                            LastWriteTime: stat.mtime ? stat.mtime.toISOString() : new Date().toISOString()
+                            LastWriteTime: stat.mtime
+                                ? stat.mtime.toISOString()
+                                : new Date().toISOString(),
                         });
                     }
                 }
-            } catch (e) { }
+            } catch (e) {}
         });
-    } catch (e) { }
+    } catch (e) {}
     return results;
 }
 
@@ -872,7 +940,13 @@ app.get('/api/downloaded/run', (req, res) => {
     if (fs.existsSync(filePath)) {
         // Use PowerShell Start-Process to handle MSIX, UAC, etc. nicely
         // and wrap it in a job to provide feedback
-        const jobId = jobs.startJob('powershell', ['-Command', 'Start-Process', '-FilePath', `'${filePath}'`, '-PassThru']);
+        const jobId = jobs.startJob('powershell', [
+            '-Command',
+            'Start-Process',
+            '-FilePath',
+            `'${filePath}'`,
+            '-PassThru',
+        ]);
         res.json({ success: true, jobId, message: `Launching ${file}` });
     } else {
         res.status(404).json({ success: false, message: 'File not found' });

@@ -12,7 +12,7 @@ const FILES = {
     installed: path.join(DATA_DIR, 'installed.json'),
     updates: path.join(DATA_DIR, 'updates.json'),
     ignored: path.join(DATA_DIR, 'ignored.json'),
-    downloads: path.join(DATA_DIR, 'downloads.json')
+    downloads: path.join(DATA_DIR, 'downloads.json'),
 };
 
 module.exports = {
@@ -34,5 +34,5 @@ module.exports = {
             console.error(`[Cache] Error loading ${key}:`, e);
             return null;
         }
-    }
+    },
 };

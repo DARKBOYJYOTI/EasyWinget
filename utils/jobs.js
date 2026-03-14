@@ -23,7 +23,7 @@ const stripAnsi = (str) => {
     // "abc\b" -> "ab"
     while (clean.includes('\x08')) {
         clean = clean.replace(/[^\x08]\x08/, ''); // Remove char + backspace
-        clean = clean.replace(/^\x08+/, '');      // Remove leading backspaces (safeguard)
+        clean = clean.replace(/^\x08+/, ''); // Remove leading backspaces (safeguard)
     }
     return clean;
 };
@@ -54,12 +54,12 @@ module.exports = {
                 cols: 120,
                 rows: 30,
                 cwd: process.cwd(),
-                env: process.env
+                env: process.env,
             });
         } else {
             // General commands (winget, etc.) wrapped in PowerShell
             // Escape arguments for PowerShell (single quotes for literals)
-            const psArgs = args.map(a => {
+            const psArgs = args.map((a) => {
                 // If it already has quotes, leave it? Or assume we need to wrap?
                 // Safest for paths with spaces is wrapping in single quotes
                 if (a.includes(' ') || a.includes('(') || a.includes(')')) return `'${a}'`;
@@ -74,7 +74,7 @@ module.exports = {
                 cols: 120,
                 rows: 30,
                 cwd: process.cwd(),
-                env: process.env
+                env: process.env,
             });
         }
 
@@ -107,7 +107,7 @@ module.exports = {
             logFile: logFile, // absolute path
             startTime: new Date(),
             done: false,
-            exitCode: null
+            exitCode: null,
         };
 
         activeJobs.set(jobId, jobData);
@@ -140,7 +140,7 @@ module.exports = {
         } catch (e) {
             console.error(`Error reading log for ${jobId}:`, e);
         }
-        return "";
+        return '';
     },
 
     cleanupJob: (jobId) => {
@@ -161,5 +161,5 @@ module.exports = {
             }
         }
         return false;
-    }
+    },
 };

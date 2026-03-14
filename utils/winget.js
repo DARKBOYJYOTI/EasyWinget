@@ -1,14 +1,4 @@
 const { exec } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-
-// Regex patterns ported from parser.ps1
-// Note: JS regex is slightly different, but the logic remains the same.
-
-// Updates: Name  Id  Version  Available
-const RGX_UPDATE = /^(.+?)\s{2,}([\w\.\-]+)\s{2,}(\S+)\s{2,}(\S+)/;
-// Installed/Search: Name  Id  Version
-const RGX_APP = /^(.+?)\s{2,}([a-zA-Z0-9\.\-\{\}_]+)\s{2,}([vV]?\d[^\s]*)/;
 
 /**
  * Strips ANSI codes and splits into lines
@@ -26,7 +16,10 @@ function cleanOutput(raw) {
     clean = clean.replace(/^[\-\\\|\/]\r/gm, '');
 
     // Split lines
-    return clean.split(/\r?\n/).map(l => l.replace(/^\s+/, '').trimEnd()).filter(l => l.length > 0);
+    return clean
+        .split(/\r?\n/)
+        .map((l) => l.replace(/^\s+/, '').trimEnd())
+        .filter((l) => l.length > 0);
 }
 
 /**
@@ -56,8 +49,8 @@ function parseApps(output) {
         if (line.length < colId) continue;
 
         const name = line.substring(0, colId).trim();
-        let id = "";
-        let version = "";
+        let id = '';
+        let version = '';
 
         if (colVersion > -1 && line.length > colVersion) {
             id = line.substring(colId, colVersion).trim();
@@ -108,14 +101,18 @@ function parseUpdates(output) {
 
         // Skip footer/summary lines (e.g., "1 upgrades available.")
         if (line.toLowerCase().includes('upgrade') && line.includes('available')) continue;
-        if (line.toLowerCase().includes('no applicable') || line.toLowerCase().includes('no package')) continue;
+        if (
+            line.toLowerCase().includes('no applicable') ||
+            line.toLowerCase().includes('no package')
+        )
+            continue;
 
         if (line.length < colId) continue;
 
         const name = line.substring(0, colId).trim();
-        let id = "";
-        let current = "";
-        let available = "";
+        let id = '';
+        let current = '';
+        let available = '';
 
         if (colVersion > -1 && line.length > colVersion) {
             id = line.substring(colId, colVersion).trim();
@@ -154,7 +151,7 @@ function invoke(args) {
             if (err && !stdout) {
                 return reject(err);
             }
-            resolve(stdout || "");
+            resolve(stdout || '');
         });
     });
 }
@@ -173,5 +170,5 @@ module.exports = {
         return parseUpdates(out);
     },
     // Raw invoke for debug/custom
-    invoke
+    invoke,
 };

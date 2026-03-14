@@ -29,6 +29,9 @@ desktop.ini
 *.swp
 *.swo
 
+# Local agent scratchpad
+agent.md
+
 # Build/Dist
 dist/
 build/

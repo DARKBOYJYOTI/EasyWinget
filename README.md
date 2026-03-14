@@ -1,7 +1,7 @@
 # 🚀 EasyWinGet
 
 **The Professional Web Interface for Windows Package Manager (Winget).**
-*Modern. Fast. Offline-Capable.*
+_Modern. Fast. Offline-Capable._
 
 ![EasyWinGet Interface](assets/preview.png)
 
@@ -27,7 +27,7 @@ EasyWinGet is a powerful, lightweight web-based GUI for Winget. It bridges the g
 
 - **OS**: Windows 10 (Version 1809+) or Windows 11.
 - **Winget**: Pre-installed on modern Windows.
-    - *Missing Winget?* [Download App Installer from Microsoft](https://aka.ms/getwinget).
+    - _Missing Winget?_ [Download App Installer from Microsoft](https://aka.ms/getwinget).
 
 ---
 
@@ -36,6 +36,7 @@ EasyWinGet is a powerful, lightweight web-based GUI for Winget. It bridges the g
 > **Note:** This release includes a bundled Node.js runtime and dependencies, making it fully portable and offline-ready.
 
 ### Option 1: Full Installation (Recommended)
+
 Installs EasyWinGet to `C:\EasyWinGet` and creates Desktop/Start Menu shortcuts.
 
 1.  **Download** the latest release `.zip` from GitHub.
@@ -49,6 +50,7 @@ Installs EasyWinGet to `C:\EasyWinGet` and creates Desktop/Start Menu shortcuts.
 5.  Launch **EasyWinGet** from your Desktop!
 
 ### Option 2: Portable Mode
+
 Run directly from the folder without installing.
 
 1.  **Download** & Extract the release.
@@ -80,4 +82,4 @@ EasyWinGet/
 ## 🛡️ License
 
 This project is open-source. Feel free to modify and distribute.
-*Powered by [Winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/).*
+_Powered by [Winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/)._

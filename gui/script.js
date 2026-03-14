@@ -13,7 +13,7 @@ const State = {
     currentTask: null,
     minimizedTasks: [],
     // Used for task logging even when task is not "current"
-    activeTasks: {}
+    activeTasks: {},
 };
 
 // ==========================================
@@ -31,17 +31,6 @@ function debounce(func, wait) {
     };
 }
 
-function copyToClipboard(text) {
-    if (!text) return;
-    navigator.clipboard.writeText(text).then(() => {
-        showToast('App ID copied to clipboard!', 'info');
-    }).catch(err => {
-        console.error('Failed to copy: ', err);
-        showToast('Failed to copy ID', 'error');
-    });
-}
-
-
 // ==========================================
 // DOM ELEMENTS
 // ==========================================
@@ -50,39 +39,39 @@ const DOM = {
         search: document.getElementById('search-view'),
         installed: document.getElementById('installed-view'),
         updates: document.getElementById('updates-view'),
-        downloaded: document.getElementById('view-downloaded')
+        downloaded: document.getElementById('view-downloaded'),
     },
     containers: {
         searchResults: document.getElementById('search-results'),
         searchEmpty: document.getElementById('search-empty'),
         searchLoading: document.getElementById('search-loading'),
         installedList: document.getElementById('installed-list'),
-        updatesGrid: document.getElementById('updates-grid')
+        updatesGrid: document.getElementById('updates-grid'),
     },
     inputs: {
         search: document.getElementById('search-input'),
         searchBtn: document.getElementById('search-btn'),
         filterInstalled: document.getElementById('filter-installed'),
-        filterUpdates: document.getElementById('filter-updates')
+        filterUpdates: document.getElementById('filter-updates'),
     },
     buttons: {
         refreshInstalled: document.getElementById('refresh-installed'),
-        refreshUpdates: document.getElementById('refresh-updates')
+        refreshUpdates: document.getElementById('refresh-updates'),
     },
     modal: {
         container: document.getElementById('task-modal'),
         title: document.getElementById('modal-title'),
         output: document.getElementById('modal-output'),
         minimize: document.getElementById('minimize-modal'),
-        close: document.getElementById('close-modal')
+        close: document.getElementById('close-modal'),
     },
     tray: document.getElementById('minimized-tray'),
     badge: {
         updates: document.getElementById('update-badge'),
-        downloaded: document.getElementById('downloaded-badge')
+        downloaded: document.getElementById('downloaded-badge'),
     },
     loading: document.getElementById('loading-overlay'),
-    toasts: document.getElementById('toast-container')
+    toasts: document.getElementById('toast-container'),
 };
 
 // ==========================================
@@ -92,155 +81,11 @@ function log(msg, data) {
     console.log(`[EasyWinGet] ${msg}`, data || '');
 }
 
-// ==========================================
-// ICON LOGIC
-// ==========================================
-const DOMAIN_MAP = {
-    'Microsoft': 'microsoft.com',
-    'Google': 'google.com',
-    'Mozilla': 'mozilla.org',
-    'Discord': 'discord.com',
-    'Spotify': 'spotify.com',
-    'Valve': 'steampowered.com',
-    'EpicGames': 'epicgames.com',
-    'Notion': 'notion.so',
-    'Slack': 'slack.com',
-    'Oracle': 'oracle.com',
-    'Adobe': 'adobe.com',
-    'VideoLAN': 'videolan.org',
-    'Canonical': 'ubuntu.com',
-    '7zip': '7-zip.org',
-    'GIMP': 'gimp.org',
-    'Blender': 'blender.org',
-    'OBSProject': 'obsproject.com',
-    'Telegram': 'telegram.org',
-    'WhatsApp': 'whatsapp.com',
-    'Zoom': 'zoom.us',
-    'Dropbox': 'dropbox.com',
-    'Figma': 'figma.com',
-    'Git': 'git-scm.com',
-    'Python': 'python.org',
-    'NodeJS': 'nodejs.org',
-    'OpenJS': 'nodejs.org',
-    'Docker': 'docker.com',
-    'Kubernetes': 'kubernetes.io',
-    'JetBrains': 'jetbrains.com',
-    'TheDocumentFoundation': 'libreoffice.org',
-    'Brave': 'brave.com',
-    'Vivaldi': 'vivaldi.com',
-    'Opera': 'opera.com',
-    'RARLab': 'rarlab.com',
-    'WinRAR': 'rarlab.com',
-    'Nullsoft': 'winamp.com',
-    'GerardoG': 'github.com',
-    'JanDeDobbeleer': 'ohmyposh.dev',
-    'OhMyPosh': 'ohmyposh.dev',
-    'BurntSushi': 'github.com',
-    'JQLang': 'github.com',
-    'Deltco': 'github.com',
-    'XhmikosR': 'github.com',
-    'CoreyButler': 'github.com',
-    'ApacheFriends': 'apachefriends.org',
-    'Adobe': 'adobe.com',
-    'EpicGames': 'epicgames.com',
-    'Valve': 'steampowered.com',
-    'Discord': 'discord.com',
-    'Slack': 'slack.com',
-    'Spotify': 'spotify.com',
-    'Notepad++': 'notepad-plus-plus.org',
-    'PuTTY': 'putty.org',
-    'Audacity': 'audacityteam.org',
-    'Inkscape': 'inkscape.org',
-    'Krita': 'krita.org',
-    'HandBrake': 'handbrake.fr',
-    'Wireshark': 'wireshark.org',
-    'VirtualBox': 'virtualbox.org',
-    'Oracle': 'oracle.com',
-    'Vmware': 'vmware.com',
-    'TeamViewer': 'teamviewer.com',
-    'AnyDesk': 'anydesk.com',
-    'Rust': 'rust-lang.org',
-    'GoLang': 'go.dev',
-    'Ruby': 'ruby-lang.org',
-    'PHP': 'php.net',
-    'Mozilla': 'mozilla.org',
-    'Thunderbird': 'thunderbird.net',
-    'Signal': 'signal.org',
-    'Element': 'element.io',
-    'Bitwarden': 'bitwarden.com',
-    'LastPass': 'lastpass.com',
-    '1Password': '1password.com',
-    'KeePass': 'keepass.info',
-    'Greenshot': 'getgreenshot.org',
-    'ShareX': 'getsharex.com',
-    'BleachBit': 'bleachbit.org',
-    'CCleaner': 'ccleaner.com',
-    'Malwarebytes': 'malwarebytes.com',
-    'Avast': 'avast.com',
-    'AVG': 'avg.com',
-    'Kaspersky': 'kaspersky.com',
-    'ESET': 'eset.com',
-    'McAfee': 'mcafee.com',
-    'Norton': 'norton.com',
-    'Logitech': 'logitech.com',
-    'Razer': 'razer.com',
-    'Corsair': 'corsair.com',
-    'SteelSeries': 'steelseries.com',
-    'Nvidia': 'nvidia.com',
-    'AMD': 'amd.com',
-    'Intel': 'intel.com',
-    'Asus': 'asus.com',
-    'Acer': 'acer.com',
-    'Dell': 'dell.com',
-    'HP': 'hp.com',
-    'Lenovo': 'lenovo.com',
-    'MSI': 'msi.com',
-    'Samsung': 'samsung.com',
-    'LG': 'lg.com',
-    'Sony': 'sony.com',
-    'Apple': 'apple.com',
-    'Amazon': 'amazon.com',
-    'Netflix': 'netflix.com',
-    'Hulu': 'hulu.com',
-    'Disney': 'disneyplus.com',
-    'Twitch': 'twitch.tv',
-    'OBS': 'obsproject.com',
-    'Streamlabs': 'streamlabs.com',
-    'Unity': 'unity.com',
-    'UnrealEngine': 'unrealengine.com',
-    'Godot': 'godotengine.org',
-    'Arduino': 'arduino.cc',
-    'RaspberryPi': 'raspberrypi.com',
-    'Plex': 'plex.tv',
-    'Jellyfin': 'jellyfin.org',
-    'Emby': 'emby.media',
-    'Kodi': 'kodi.tv',
-    'VLC': 'videolan.org',
-    'MPC-HC': 'mpc-hc.org',
-    'PotPlayer': 'potplayer.daum.net',
-    'Foobar2000': 'foobar2000.org',
-    'AIMP': 'aimp.ru',
-    'MusicBee': 'getmusicbee.com',
-    'Audacious': 'audacious-media-player.org',
-    'Clementine': 'clementine-player.org',
-    'Strawberry': 'strawberrymusicplayer.org',
-    'QuodLibet': 'quodlibet.readthedocs.io',
-    'Rhythmbox': 'wiki.gnome.org/Apps/Rhythmbox',
-    'Lollypop': 'wiki.gnome.org/Apps/Lollypop',
-    'GnomeMusic': 'wiki.gnome.org/Apps/Music',
-    'Elisa': 'kde.org/applications/multimedia/org.kde.elisa',
-    'JuK': 'kde.org/applications/multimedia/org.kde.juk',
-    'Cantata': 'github.com/CDrummond/cantata',
-    'MPD': 'musicpd.org',
-    'NCMPCPP': 'rybczak.net/ncmpcpp',
-    'Beets': 'beets.io',
-    'Picard': 'picard.musicbrainz.org'
-};
-
 function getEmojiFallback(name) {
     if (!name) return '📦';
     const n = name.toLowerCase();
-    if (n.includes('chrome') || n.includes('edge') || n.includes('firefox') || n.includes('brave')) return '🌐';
+    if (n.includes('chrome') || n.includes('edge') || n.includes('firefox') || n.includes('brave'))
+        return '🌐';
     if (n.includes('code') || n.includes('git') || n.includes('studio')) return '💻';
     if (n.includes('discord') || n.includes('slack') || n.includes('telegram')) return '💬';
     if (n.includes('spotify') || n.includes('vlc') || n.includes('media')) return '🎵';
@@ -306,7 +151,7 @@ function getDomain(id) {
         'Adobe.CreativeCloud': 'adobe.com',
         'Adobe.Photoshop': 'adobe.com',
         'Adobe.Premiere': 'adobe.com',
-        'Adobe.Illustrator': 'adobe.com'
+        'Adobe.Illustrator': 'adobe.com',
     };
 
     if (PRODUCT_MAP[id]) return PRODUCT_MAP[id];
@@ -319,7 +164,13 @@ function getDomain(id) {
     }
 
     // Filter out garbage WinGet IDs
-    if (id.startsWith('ARP') || id.startsWith('MSIX') || id.startsWith('User') || id.startsWith('Machine') || id.includes('{')) {
+    if (
+        id.startsWith('ARP') ||
+        id.startsWith('MSIX') ||
+        id.startsWith('User') ||
+        id.startsWith('Machine') ||
+        id.includes('{')
+    ) {
         return null;
     }
 
@@ -342,21 +193,24 @@ function getDomain(id) {
     }
     */
     return null;
-};
+}
 
 // Intersection Observer for Lazy Loading
-const iconObserver = new IntersectionObserver((entries, observer) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            const img = entry.target;
-            observer.unobserve(img);
-            loadIcon(img);
-        }
-    });
-}, { rootMargin: "100px" });
+const iconObserver = new IntersectionObserver(
+    (entries, observer) => {
+        entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+                observer.unobserve(img);
+                loadIcon(img);
+            }
+        });
+    },
+    { rootMargin: '100px' }
+);
 
 function observeIcons() {
-    document.querySelectorAll('img.lazy-icon').forEach(img => {
+    document.querySelectorAll('img.lazy-icon').forEach((img) => {
         // Only observe if not already processed
         if (!img.dataset.loaded) {
             iconObserver.observe(img);
@@ -379,7 +233,7 @@ async function loadIcon(img) {
     if (!src) return;
 
     // Mark as processed attempt
-    img.dataset.loaded = "true";
+    img.dataset.loaded = 'true';
 
     // Add loading state to parent
     if (img.parentElement && img.parentElement.classList.contains('icon-wrapper')) {
@@ -425,7 +279,7 @@ async function loadIcon(img) {
                     return;
                 }
             }
-        } catch (e) { }
+        } catch (e) {}
 
         // If Manifest failed or no domain, fallback to Stage 6 (Give Up / Fallback Icon)
         // Or just Fallback Emoji
@@ -435,7 +289,7 @@ async function loadIcon(img) {
         if (img.parentElement.classList.contains('icon-wrapper')) {
             img.parentElement.classList.remove('icon-loading');
         }
-        // Trigger "Give Up" visual? 
+        // Trigger "Give Up" visual?
         // processIconStage(img) might expect 'step' logic.
         // Let's just force display:none and show fallback.
         img.style.display = 'none';
@@ -471,7 +325,6 @@ async function loadIcon(img) {
                 img.parentElement.classList.add('has-icon');
             }
             return;
-
         } catch (e) {
             // Extract domain for fallback from the src URL param
             try {
@@ -483,7 +336,7 @@ async function loadIcon(img) {
                     img.parentElement.classList.remove('icon-loading');
                     img.parentElement.classList.add('has-icon');
                 }
-            } catch (ex) { }
+            } catch (ex) {}
             return;
         }
     }
@@ -515,14 +368,13 @@ async function loadIcon(img) {
             }
             return;
         }
-    } catch (e) { }
+    } catch (e) {}
 
     // If failed, proceed to next stage
     processIconStage(img);
 }
 
 async function processIconStage(img) {
-    const id = img.dataset.id;
     let stage = parseInt(img.dataset.stage || '0');
 
     // If local icon failed (stage 0), try web scraping via manifest
@@ -566,7 +418,10 @@ function getAppIconHTML(app, isInstalled = false) {
         initialStage = -1; // Special stage for file based
     }
     // 2. Local Icon for Installed Apps
-    else if (isInstalled || (State.cache.installed && State.cache.installed.some(i => i.id === app.id))) {
+    else if (
+        isInstalled ||
+        (State.cache.installed && State.cache.installed.some((i) => i.id === app.id))
+    ) {
         const encodedName = encodeURIComponent(app.name);
         const encodedId = encodeURIComponent(app.id);
         initialSrc = `/api/icon?id=${encodedId}&name=${encodedName}`;
@@ -613,11 +468,6 @@ function getAppIconHTML(app, isInstalled = false) {
     `;
 }
 
-// Backward compatibility alias for parts I might have missed
-function getIcon(name) {
-    return getEmojiFallback(name);
-}
-
 // Toast Singleton - Replaces any existing toast
 function showToast(message, type = 'info') {
     if (!DOM.toasts) {
@@ -651,14 +501,6 @@ function showToast(message, type = 'info') {
             if (toast.parentNode) toast.parentNode.removeChild(toast);
         }, 300);
     }, 3000);
-}
-
-function showLoading() {
-    if (DOM.loading) DOM.loading.style.display = 'flex';
-}
-
-function hideLoading() {
-    if (DOM.loading) DOM.loading.style.display = 'none';
 }
 
 // Custom Confirm Dialog
@@ -710,9 +552,12 @@ function updateTaskLog(task, text, type = 'info') {
     text = text.replace(/Γûê/g, '█').replace(/ΓûÆ/g, '▒');
 
     // Detect progress bar lines (e.g., containing blocks or "1.2 MB / 5.6 MB") or spinner chars
-    const isProgressLine = text.includes('█') || text.includes('▒')
-        || (text.match(/\d+(\.\d+)?\s*(KB|MB|GB)\s*\/\s*\d+(\.\d+)?\s*(KB|MB|GB)/i) && !text.includes('id'))
-        || text.match(/^\s*[\-\\\|\/]\s*$/);
+    const isProgressLine =
+        text.includes('█') ||
+        text.includes('▒') ||
+        (text.match(/\d+(\.\d+)?\s*(KB|MB|GB)\s*\/\s*\d+(\.\d+)?\s*(KB|MB|GB)/i) &&
+            !text.includes('id')) ||
+        text.match(/^\s*[\-\\\|\/]\s*$/);
 
     // Add to history
     // If we want to animate, we should replace the last entry if both are progress lines
@@ -752,26 +597,42 @@ function updateTaskLog(task, text, type = 'info') {
     if (task.stage !== 'complete' && task.stage !== 'error') {
         const lower = text.toLowerCase();
         if (lower.includes('package id') || lower.includes('starting')) {
-            task.progress = 15; task.stage = 'init';
+            task.progress = 15;
+            task.stage = 'init';
         } else if (lower.includes('running:') || lower.includes('searching')) {
-            task.progress = 30; task.stage = 'search';
+            task.progress = 30;
+            task.stage = 'search';
         } else if (lower.includes('downloading') || lower.includes('download')) {
-            task.progress = 50; task.stage = 'download';
-        } else if (lower.includes('uninstalling') || lower.includes('removing') || lower.includes('uninstall')) {
-            task.progress = 70; task.stage = 'uninstall';
-        } else if ((lower.includes('installing') || lower.includes('install')) && !lower.includes('uninstall')) {
-            task.progress = 70; task.stage = 'install';
+            task.progress = 50;
+            task.stage = 'download';
+        } else if (
+            lower.includes('uninstalling') ||
+            lower.includes('removing') ||
+            lower.includes('uninstall')
+        ) {
+            task.progress = 70;
+            task.stage = 'uninstall';
+        } else if (
+            (lower.includes('installing') || lower.includes('install')) &&
+            !lower.includes('uninstall')
+        ) {
+            task.progress = 70;
+            task.stage = 'install';
         } else if (lower.includes('upgrading') || lower.includes('update')) {
-            task.progress = 70; task.stage = 'update';
+            task.progress = 70;
+            task.stage = 'update';
         } else if (lower.includes('verifying') || lower.includes('configuring')) {
-            task.progress = 85; task.stage = 'verify';
+            task.progress = 85;
+            task.stage = 'verify';
         }
     }
 
     if (type === 'success') {
-        task.progress = 100; task.stage = 'complete';
+        task.progress = 100;
+        task.stage = 'complete';
     } else if (type === 'error') {
-        task.progress = 100; task.stage = 'error';
+        task.progress = 100;
+        task.stage = 'error';
     }
 
     // Update progress bar UI (always, in case stage changed)
@@ -781,7 +642,7 @@ function updateTaskLog(task, text, type = 'info') {
 
         if (progressBar && progressText) {
             let statusText = text;
-            if (isProgressLine) statusText = "Downloading..."; // Simplify text on the bar itself if it's a complex progress line
+            if (isProgressLine) statusText = 'Downloading...'; // Simplify text on the bar itself if it's a complex progress line
 
             if (task.stage === 'init') statusText = 'Preparing...';
             if (task.stage === 'search') statusText = 'Searching...';
@@ -798,7 +659,6 @@ function updateTaskLog(task, text, type = 'info') {
     }
 }
 
-
 function showTaskModal(title, appId) {
     DOM.modal.title.textContent = title;
     DOM.modal.output.innerHTML = '';
@@ -812,7 +672,7 @@ function showTaskModal(title, appId) {
         progress: 0,
         stage: 'init',
         processedLines: 0, // Track processed log lines
-        jobId: null // Will be set when job starts
+        jobId: null, // Will be set when job starts
     };
 
     State.currentTask = newTask;
@@ -863,13 +723,6 @@ function showTaskModal(title, appId) {
     return newTask;
 }
 
-// Deprecated: helper for old calls, but we should update calls to use updateTaskLog
-function addModalOutput(text, type = 'info') {
-    if (State.currentTask) {
-        updateTaskLog(State.currentTask, text, type);
-    }
-}
-
 function closeModal() {
     const backdrop = document.getElementById('modal-backdrop');
     backdrop.style.display = 'none';
@@ -907,12 +760,16 @@ function updateMinimizedTray() {
     }
 
     DOM.tray.style.display = 'flex';
-    DOM.tray.innerHTML = State.minimizedTasks.map((task, index) => `
+    DOM.tray.innerHTML = State.minimizedTasks
+        .map(
+            (task, index) => `
         <div class="minimized-task" onclick="restoreTask(${index})">
             <span class="task-icon">📋</span>
             <span class="task-name">${task.title}</span>
         </div>
-    `).join('');
+    `
+        )
+        .join('');
 }
 
 window.restoreTask = function (index) {
@@ -927,9 +784,9 @@ window.restoreTask = function (index) {
     document.body.classList.add('modal-open');
 
     DOM.modal.title.textContent = task.title;
-    DOM.modal.output.innerHTML = task.output.map(o =>
-        `<div class="output-line ${o.type}">${o.text}</div>`
-    ).join('');
+    DOM.modal.output.innerHTML = task.output
+        .map((o) => `<div class="output-line ${o.type}">${o.text}</div>`)
+        .join('');
     DOM.modal.output.scrollTop = DOM.modal.output.scrollHeight;
 
     // Restore progress UI
@@ -1085,16 +942,20 @@ async function processLogLinesWithDelay(task, lines) {
         if (!trimmed) continue;
 
         // Check if it's a progress/spinner line
-        const isProgress = trimmed.includes('█') || trimmed.includes('▒') || trimmed.match(/[\-\\\|\/]/) || trimmed.match(/\d+(\.\d+)?\s*(KB|MB|GB)\s*\/\s*\d+(\.\d+)?\s*(KB|MB|GB)/i);
+        const isProgress =
+            trimmed.includes('█') ||
+            trimmed.includes('▒') ||
+            trimmed.match(/[\-\\\|\/]/) ||
+            trimmed.match(/\d+(\.\d+)?\s*(KB|MB|GB)\s*\/\s*\d+(\.\d+)?\s*(KB|MB|GB)/i);
 
         updateTaskLog(task, trimmed, 'info');
 
         // Add delay for progress lines so user can SEE each update
         // 100ms = smooth animation, 10ms for regular text
         if (isProgress && i < lines.length - 1) {
-            await new Promise(r => setTimeout(r, 100));
+            await new Promise((r) => setTimeout(r, 100));
         } else if (!isProgress && i < lines.length - 1) {
-            await new Promise(r => setTimeout(r, 10));
+            await new Promise((r) => setTimeout(r, 10));
         }
 
         // --- NEW: Detect Install Phase and Hide Cancel Button ---
@@ -1137,21 +998,27 @@ window.confirmInstall = async function (id, name) {
         updateTaskLog(task, `Requesting install...`, 'info');
 
         fetch(`/api/install?id=${encodeURIComponent(id)}`)
-            .then(res => res.json())
-            .then(data => {
+            .then((res) => res.json())
+            .then((data) => {
                 if (data.success && data.jobId) {
                     task.jobId = data.jobId;
                     updateTaskLog(task, '✓ Request accepted. Starting background job...', 'info');
-                    pollJob(data.jobId, task, `${safeName} installed successfully!`, `Failed by install ${safeName}`, () => {
-                        fetchInstalled(true);
-                    });
+                    pollJob(
+                        data.jobId,
+                        task,
+                        `${safeName} installed successfully!`,
+                        `Failed by install ${safeName}`,
+                        () => {
+                            fetchInstalled(true);
+                        }
+                    );
                 } else {
                     updateTaskLog(task, '✗ Installation request failed', 'error');
                     if (data.message) updateTaskLog(task, data.message, 'error');
-                    if (data.error) updateTaskLog(task, "Server Error: " + data.error, 'error');
+                    if (data.error) updateTaskLog(task, 'Server Error: ' + data.error, 'error');
                 }
             })
-            .catch(err => {
+            .catch((err) => {
                 updateTaskLog(task, '✗ Network error', 'error');
                 showToast(`Error installing ${safeName}`, 'error');
             });
@@ -1173,17 +1040,23 @@ window.confirmDownload = async function (id, name) {
         updateTaskLog(task, `Requesting download...`, 'info');
 
         fetch(`/api/download?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`)
-            .then(res => res.json())
-            .then(data => {
+            .then((res) => res.json())
+            .then((data) => {
                 if (data.success && data.jobId) {
                     task.jobId = data.jobId;
-                    pollJob(data.jobId, task, `${safeName} downloaded!`, `Failed to download ${safeName}`, () => {
-                        loadDownloaded(true);
-                    });
+                    pollJob(
+                        data.jobId,
+                        task,
+                        `${safeName} downloaded!`,
+                        `Failed to download ${safeName}`,
+                        () => {
+                            loadDownloaded(true);
+                        }
+                    );
                 } else {
                     updateTaskLog(task, '✗ Download request failed', 'error');
                     if (data.message) updateTaskLog(task, data.message, 'error');
-                    if (data.error) updateTaskLog(task, "Server Error: " + data.error, 'error');
+                    if (data.error) updateTaskLog(task, 'Server Error: ' + data.error, 'error');
                 }
             });
     }
@@ -1204,17 +1077,24 @@ window.confirmUninstall = async function (id, name) {
         updateTaskLog(task, `Requesting uninstall...`, 'info');
 
         fetch(`/api/uninstall?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.success && data.jobId) { // Check for jobId
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.success && data.jobId) {
+                    // Check for jobId
                     task.jobId = data.jobId;
-                    pollJob(data.jobId, task, `${safeName} uninstalled!`, `Failed to uninstall ${safeName}`, () => {
-                        loadInstalled(true);
-                    });
+                    pollJob(
+                        data.jobId,
+                        task,
+                        `${safeName} uninstalled!`,
+                        `Failed to uninstall ${safeName}`,
+                        () => {
+                            loadInstalled(true);
+                        }
+                    );
                 } else {
                     updateTaskLog(task, '✗ Uninstall request failed', 'error');
                     if (data.message) updateTaskLog(task, data.message, 'error');
-                    if (data.error) updateTaskLog(task, "Server Error: " + data.error, 'error');
+                    if (data.error) updateTaskLog(task, 'Server Error: ' + data.error, 'error');
                 }
             });
     }
@@ -1235,17 +1115,23 @@ window.confirmUpdate = async function (id, name) {
         updateTaskLog(task, `Requesting update...`, 'info');
 
         fetch(`/api/update?id=${encodeURIComponent(id)}`)
-            .then(res => res.json())
-            .then(data => {
+            .then((res) => res.json())
+            .then((data) => {
                 if (data.success && data.jobId) {
                     task.jobId = data.jobId;
-                    pollJob(data.jobId, task, `${safeName} updated!`, `Failed to update ${safeName}`, () => {
-                        loadUpdates(true);
-                    });
+                    pollJob(
+                        data.jobId,
+                        task,
+                        `${safeName} updated!`,
+                        `Failed to update ${safeName}`,
+                        () => {
+                            loadUpdates(true);
+                        }
+                    );
                 } else {
                     updateTaskLog(task, '✗ Update request failed', 'error');
                     if (data.message) updateTaskLog(task, data.message, 'error');
-                    if (data.error) updateTaskLog(task, "Server Error: " + data.error, 'error');
+                    if (data.error) updateTaskLog(task, 'Server Error: ' + data.error, 'error');
                 }
             });
     }
@@ -1259,9 +1145,8 @@ function renderSearchResults(results) {
     const empty = DOM.containers.searchEmpty;
 
     // Filter out invalid results (null, undefined, or missing required fields)
-    const validResults = results && Array.isArray(results)
-        ? results.filter(app => app && app.id && app.name)
-        : [];
+    const validResults =
+        results && Array.isArray(results) ? results.filter((app) => app && app.id && app.name) : [];
 
     if (validResults.length === 0) {
         container.innerHTML = '';
@@ -1271,7 +1156,7 @@ function renderSearchResults(results) {
     }
 
     // Sort: Installed first, then keep winget's original relevance order
-    const installedIds = new Set((State.cache.installed || []).map(i => i.id));
+    const installedIds = new Set((State.cache.installed || []).map((i) => i.id));
 
     validResults.sort((a, b) => {
         const aInstalled = installedIds.has(a.id);
@@ -1288,31 +1173,34 @@ function renderSearchResults(results) {
     empty.style.display = 'none';
     container.style.display = 'grid';
 
-    container.innerHTML = validResults.map(app => {
-        let actionButtons = '';
-        const isInstalled = State.cache.installed && State.cache.installed.some(i => i.id === app.id);
-        const hasUpdate = State.cache.updates && State.cache.updates.some(u => u.id === app.id);
+    container.innerHTML = validResults
+        .map((app) => {
+            let actionButtons = '';
+            const isInstalled =
+                State.cache.installed && State.cache.installed.some((i) => i.id === app.id);
+            const hasUpdate =
+                State.cache.updates && State.cache.updates.some((u) => u.id === app.id);
 
-        if (hasUpdate) {
-            actionButtons = `
+            if (hasUpdate) {
+                actionButtons = `
                 <button class="btn btn-primary" onclick="confirmUpdate('${app.id}', '${app.name}')">Update</button>
                 <button class="btn btn-secondary" onclick="confirmDownload('${app.id}', '${app.name}')">Download</button>
             `;
-        } else if (isInstalled) {
-            actionButtons = `
+            } else if (isInstalled) {
+                actionButtons = `
                 <button class="btn btn-secondary" disabled style="opacity:0.7; cursor:default;">Installed</button>
                 <button class="btn btn-secondary" onclick="confirmDownload('${app.id}', '${app.name}')">Download</button>
             `;
-        } else {
-            actionButtons = `
+            } else {
+                actionButtons = `
                 <button class="btn btn-primary" onclick="confirmInstall('${app.id}', '${app.name}')">Install</button>
                 <button class="btn btn-secondary" onclick="confirmDownload('${app.id}', '${app.name}')">Download</button>
             `;
-        }
+            }
 
-        const infoIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+            const infoIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
 
-        return `
+            return `
         <div class="app-card">
             <button class="btn-info-corner" onclick="showPackageDetails('${app.id}', '${app.name.replace(/'/g, "\\'")}', '${app.version || ''}', ${isInstalled})" title="View Details">${infoIconSvg}</button>
             ${getAppIconHTML(app)}
@@ -1328,7 +1216,9 @@ function renderSearchResults(results) {
                 ${actionButtons}
             </div>
         </div>
-    `}).join('');
+    `;
+        })
+        .join('');
 
     log(`Rendered ${validResults.length} search results`);
     observeIcons();
@@ -1338,29 +1228,35 @@ function renderInstalledApps(apps, filter = '') {
     const container = DOM.containers.installedList;
 
     // Validate apps array
-    const validApps = apps && Array.isArray(apps)
-        ? apps.filter(app => app && app.id && app.name)
-        : [];
+    const validApps =
+        apps && Array.isArray(apps) ? apps.filter((app) => app && app.id && app.name) : [];
 
     if (validApps.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="empty-icon">💻</div><h3>No apps found</h3></div>';
+        container.innerHTML =
+            '<div class="empty-state"><div class="empty-icon">💻</div><h3>No apps found</h3></div>';
         return;
     }
 
     const headerTitle = document.getElementById('installed-header-title');
     if (headerTitle) headerTitle.textContent = `Installed Applications (${validApps.length})`;
 
-    const filtered = filter ? validApps.filter(app =>
-        (app.name && app.name.toLowerCase().includes(filter.toLowerCase())) ||
-        (app.id && app.id.toLowerCase().includes(filter.toLowerCase()))
-    ) : validApps;
+    const filtered = filter
+        ? validApps.filter(
+              (app) =>
+                  (app.name && app.name.toLowerCase().includes(filter.toLowerCase())) ||
+                  (app.id && app.id.toLowerCase().includes(filter.toLowerCase()))
+          )
+        : validApps;
 
     if (filtered.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><h3>No matches</h3></div>';
+        container.innerHTML =
+            '<div class="empty-state"><div class="empty-icon">🔍</div><h3>No matches</h3></div>';
         return;
     }
 
-    container.innerHTML = filtered.map(app => `
+    container.innerHTML = filtered
+        .map(
+            (app) => `
         <div class="app-row">
             ${getAppIconHTML(app, true)}
             <div class="info">
@@ -1373,7 +1269,9 @@ function renderInstalledApps(apps, filter = '') {
             </div>
             <button class="btn btn-danger" onclick="confirmUninstall('${app.id}', '${app.name}')">Uninstall</button>
         </div>
-    `).join('');
+    `
+        )
+        .join('');
 
     log(`Rendered ${filtered.length}/${validApps.length} installed apps`);
     observeIcons();
@@ -1383,12 +1281,12 @@ function renderUpdates(updates, filter = '') {
     const container = DOM.containers.updatesGrid;
 
     // Validate updates array
-    const validUpdates = updates && Array.isArray(updates)
-        ? updates.filter(app => app && app.id && app.name)
-        : [];
+    const validUpdates =
+        updates && Array.isArray(updates) ? updates.filter((app) => app && app.id && app.name) : [];
 
     if (validUpdates.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><h3>All up to date!</h3></div>';
+        container.innerHTML =
+            '<div class="empty-state"><div class="empty-icon">✅</div><h3>All up to date!</h3></div>';
         if (DOM.badge && DOM.badge.updates) DOM.badge.updates.style.display = 'none';
         return;
     }
@@ -1401,17 +1299,23 @@ function renderUpdates(updates, filter = '') {
         updateAllBtn.style.display = validUpdates.length > 0 ? 'inline-block' : 'none';
     }
 
-    const filtered = filter ? validUpdates.filter(app =>
-        (app.name && app.name.toLowerCase().includes(filter.toLowerCase())) ||
-        (app.id && app.id.toLowerCase().includes(filter.toLowerCase()))
-    ) : validUpdates;
+    const filtered = filter
+        ? validUpdates.filter(
+              (app) =>
+                  (app.name && app.name.toLowerCase().includes(filter.toLowerCase())) ||
+                  (app.id && app.id.toLowerCase().includes(filter.toLowerCase()))
+          )
+        : validUpdates;
 
     if (filtered.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><h3>No matches</h3></div>';
+        container.innerHTML =
+            '<div class="empty-state"><div class="empty-icon">🔍</div><h3>No matches</h3></div>';
         return;
     }
 
-    container.innerHTML = filtered.map(app => `
+    container.innerHTML = filtered
+        .map(
+            (app) => `
         <div class="app-card">
             ${getAppIconHTML(app)}
             <h3>${app.name}</h3>
@@ -1430,7 +1334,9 @@ function renderUpdates(updates, filter = '') {
                 <button class="btn btn-secondary" style="flex: 1;" onclick="confirmIgnore('${app.id}', '${app.name}')" title="Ignore this update">Ignore</button>
             </div>
         </div>
-    `).join('');
+    `
+        )
+        .join('');
 
     if (DOM.badge && DOM.badge.updates) {
         DOM.badge.updates.textContent = validUpdates.length;
@@ -1448,7 +1354,9 @@ window.confirmIgnore = async function (id, name) {
     const safeName = name.replace(/'/g, "\\'");
     if (await customConfirm('Ignore Update', `Hide updates for "${safeName}"?`, '🙈')) {
         try {
-            const data = await apiCall(`/api/ignore?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`);
+            const data = await apiCall(
+                `/api/ignore?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`
+            );
             if (data && data.success) {
                 showToast(`Ignored ${safeName}`, 'success');
                 loadUpdates(); // Refresh list to remove it
@@ -1476,7 +1384,9 @@ window.openIgnoredModal = async function () {
         if (apps.length === 0) {
             list.innerHTML = '<div class="empty-state"><p>No ignored apps</p></div>';
         } else {
-            list.innerHTML = apps.map(app => `
+            list.innerHTML = apps
+                .map(
+                    (app) => `
                 <div class="app-row" style="padding: 8px; border-bottom:1px solid var(--border);">
                     <div class="info">
                         <h3>${app.name || app.id}</h3>
@@ -1484,7 +1394,9 @@ window.openIgnoredModal = async function () {
                     </div>
                     <button class="btn btn-secondary" style="font-size:0.8rem;" onclick="unignoreApp('${app.id}')">Unignore</button>
                 </div>
-            `).join('');
+            `
+                )
+                .join('');
         }
     } catch (e) {
         list.innerHTML = '<p class="error">Failed to load ignored apps</p>';
@@ -1496,7 +1408,7 @@ window.unignoreApp = async function (id) {
         const data = await apiCall(`/api/unignore?id=${encodeURIComponent(id)}`);
         if (data && data.success) {
             showToast('App unignored', 'success');
-            openIgnoredModal(); // Refresh modal
+            window.openIgnoredModal(); // Refresh modal
             loadUpdates(false, true); // Background refresh updates list
         }
     } catch (e) {
@@ -1540,32 +1452,39 @@ function renderDownloaded(files) {
     if (container) container.style.display = 'flex';
 
     if (container) {
-        container.innerHTML = validFiles.map(file => {
-            const size = (file.Length / 1024 / 1024).toFixed(2) + ' MB';
+        container.innerHTML = validFiles
+            .map((file) => {
+                const size = (file.Length / 1024 / 1024).toFixed(2) + ' MB';
 
-            // Fix Date Parsing
-            let dateStr = 'Unknown Date';
-            if (file.LastWriteTime) {
-                try {
-                    // Parse ISO string
-                    const date = new Date(file.LastWriteTime);
-                    if (!isNaN(date.getTime())) {
-                        // Format: "Jan 4, 3:30 PM"
-                        dateStr = date.toLocaleDateString(undefined, {
-                            month: 'short', day: 'numeric', year: 'numeric'
-                        }) + ', ' + date.toLocaleTimeString(undefined, {
-                            hour: 'numeric', minute: '2-digit'
-                        });
+                // Fix Date Parsing
+                let dateStr = 'Unknown Date';
+                if (file.LastWriteTime) {
+                    try {
+                        // Parse ISO string
+                        const date = new Date(file.LastWriteTime);
+                        if (!isNaN(date.getTime())) {
+                            // Format: "Jan 4, 3:30 PM"
+                            dateStr =
+                                date.toLocaleDateString(undefined, {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                }) +
+                                ', ' +
+                                date.toLocaleTimeString(undefined, {
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                });
+                        }
+                    } catch (e) {
+                        console.error('Date parsing error', e);
                     }
-                } catch (e) {
-                    console.error('Date parsing error', e);
                 }
-            }
 
-            // Escape backslashes for string literal in onclick
-            const safePath = file.Name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                // Escape backslashes for string literal in onclick
+                const safePath = file.Name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-            return `
+                return `
             <div class="app-row">
                 ${getAppIconHTML({ name: file.Name, file: file.Name })}
                 <div class="info">
@@ -1578,7 +1497,9 @@ function renderDownloaded(files) {
                     <button class="btn btn-danger" onclick="confirmDeleteDownloaded('${safePath}')">Delete</button>
                 </div>
             </div>
-        `}).join('');
+        `;
+            })
+            .join('');
     }
 
     log(`Rendered ${validFiles.length} downloaded files`);
@@ -1619,7 +1540,7 @@ async function loadDownloaded(background = false) {
 
     try {
         const p1 = fetchDownloaded();
-        const p2 = new Promise(r => setTimeout(r, 800)); // Minimum 800ms spin
+        const p2 = new Promise((r) => setTimeout(r, 800)); // Minimum 800ms spin
         const [files] = await Promise.all([p1, p2]);
 
         renderDownloaded(files);
@@ -1660,11 +1581,11 @@ window.confirmRunDownloaded = async function (fileName) {
         updateTaskLog(task, `Requesting launch via PowerShell...`, 'info');
 
         fetch(`/api/downloaded/run?file=${encodeURIComponent(fileName)}`)
-            .then(res => res.json())
-            .then(data => {
+            .then((res) => res.json())
+            .then((data) => {
                 if (data.success && data.jobId) {
                     pollJob(data.jobId, task, 'Launched successfully!', 'Launch failed', () => {
-                        // Optional: close modal automatically on success? 
+                        // Optional: close modal automatically on success?
                         // User might want to see output.
                     });
                 } else {
@@ -1679,17 +1600,13 @@ window.confirmRunDownloaded = async function (fileName) {
 };
 
 window.confirmDeleteDownloaded = async function (fileName) {
-    const confirmed = await customConfirm(
-        'Delete File',
-        `Permanently delete "${fileName}"?`,
-        '🗑️'
-    );
+    const confirmed = await customConfirm('Delete File', `Permanently delete "${fileName}"?`, '🗑️');
 
     if (confirmed) {
         showToast(`Deleting ${fileName}...`, 'info');
         fetch(`/api/downloaded/delete?file=${encodeURIComponent(fileName)}`)
-            .then(res => res.json())
-            .then(data => {
+            .then((res) => res.json())
+            .then((data) => {
                 if (data.success) {
                     showToast(`Deleted ${fileName}`, 'success');
                     // Refresh list AND BADGE immediately
@@ -1705,8 +1622,8 @@ window.confirmDeleteDownloaded = async function (fileName) {
 // Open folder containing downloaded file
 window.openDownloadedFolder = function (fileName) {
     fetch(`/api/downloaded/open-folder?file=${encodeURIComponent(fileName)}`)
-        .then(res => res.json())
-        .then(data => {
+        .then((res) => res.json())
+        .then((data) => {
             if (!data.success) {
                 showToast('Failed to open folder', 'error');
             }
@@ -1732,7 +1649,9 @@ function switchView(viewName) {
         if (clearBtn) clearBtn.style.display = 'none';
 
         // Hide initial empty text if we want a fresh start
-        if (DOM.containers.searchEmpty) DOM.containers.searchEmpty.innerHTML = '<div class="empty-icon">🔍</div><h3>Search Packages</h3><p>Type to search...</p>';
+        if (DOM.containers.searchEmpty)
+            DOM.containers.searchEmpty.innerHTML =
+                '<div class="empty-icon">🔍</div><h3>Search Packages</h3><p>Type to search...</p>';
     }
 
     // Reset filters
@@ -1760,7 +1679,7 @@ function switchView(viewName) {
     // Standard View Switching
     State.currentView = viewName;
 
-    document.querySelectorAll('.nav-btn').forEach(btn => {
+    document.querySelectorAll('.nav-btn').forEach((btn) => {
         if (btn.dataset.view === viewName) {
             btn.classList.add('active');
         } else {
@@ -1768,7 +1687,7 @@ function switchView(viewName) {
         }
     });
 
-    Object.keys(DOM.views).forEach(key => {
+    Object.keys(DOM.views).forEach((key) => {
         if (DOM.views[key]) {
             DOM.views[key].style.display = key === viewName ? 'block' : 'none';
         }
@@ -1866,7 +1785,8 @@ async function handleSearch(query) {
     results.innerHTML = '';
 
     if (trimmed.length < 2) {
-        empty.innerHTML = '<div class="empty-icon">✍️</div><h3>Start typing</h3><p>Enter at least 2 characters</p>';
+        empty.innerHTML =
+            '<div class="empty-icon">✍️</div><h3>Start typing</h3><p>Enter at least 2 characters</p>';
         empty.style.display = 'block';
         return;
     }
@@ -1893,8 +1813,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load version from version.json
     // Load version from version.json
     fetch('/version.json')
-        .then(res => res.json())
-        .then(data => {
+        .then((res) => res.json())
+        .then((data) => {
             const versionEl = document.getElementById('app-version');
             const descEl = document.getElementById('app-description');
 
@@ -1910,7 +1830,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
     // Setup navigation
-    document.querySelectorAll('.nav-btn').forEach(btn => {
+    document.querySelectorAll('.nav-btn').forEach((btn) => {
         btn.addEventListener('click', () => switchView(btn.dataset.view));
     });
 
@@ -2049,11 +1969,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Ignored Modal Events
     const viewIgnoredBtn = document.getElementById('view-ignored-btn');
     if (viewIgnoredBtn) {
-        viewIgnoredBtn.addEventListener('click', openIgnoredModal);
+        viewIgnoredBtn.addEventListener('click', window.openIgnoredModal);
     }
     const closeIgnoredBtn = document.getElementById('close-ignored-modal');
     if (closeIgnoredBtn) {
-        closeIgnoredBtn.addEventListener('click', closeIgnoredModal);
+        closeIgnoredBtn.addEventListener('click', window.closeIgnoredModal);
     }
 
     // Update All button
@@ -2071,7 +1991,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const confirmDialog = document.getElementById('confirm-dialog');
 
             if (ignoredModal && ignoredModal.style.display === 'flex') {
-                closeIgnoredModal();
+                window.closeIgnoredModal();
             } else if (confirmDialog && confirmDialog.style.display !== 'none') {
                 confirmDialog.style.display = 'none';
             } else if (taskModal && taskModal.style.display !== 'none') {
@@ -2114,71 +2034,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ==========================================
-// IGNORED APPS MODAL
-// ==========================================
-function openIgnoredModal() {
-    const ignoredApps = getIgnoredApps();
-    const modal = document.getElementById('ignored-modal');
-    const list = document.getElementById('ignored-list');
-
-    if (!modal || !list) return;
-
-    list.innerHTML = '';
-
-    if (ignoredApps.length === 0) {
-        list.innerHTML = `
-            <div style="flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; color: var(--text-secondary);">
-                <div style="font-size: 3rem; margin-bottom: 12px; opacity: 0.5;">📋</div>
-                <p style="margin: 0;">No ignored apps</p>
-            </div>
-        `;
-    } else {
-        ignoredApps.forEach(app => {
-            const item = document.createElement('div');
-            item.style.cssText = `
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                padding: 12px 16px;
-                background: var(--bg-light);
-                border-radius: 8px;
-                margin-bottom: 8px;
-            `;
-
-            item.innerHTML = `
-                <div style="flex: 1;">
-                    <div style="font-weight: 500; margin-bottom: 2px;">${app.name}</div>
-                    <div style="font-size: 0.85rem; color: var(--text-secondary);">${app.id}</div>
-                </div>
-                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.85rem;" 
-                        onclick="unignoreApp('${app.id.replace(/'/g, "\\'")}', '${app.name.replace(/'/g, "\\'")}')">
-                    Un-ignore
-                </button>
-            `;
-
-            list.appendChild(item);
-        });
-    }
-
-    modal.style.display = 'flex';
-}
-
-function closeIgnoredModal() {
-    const modal = document.getElementById('ignored-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-function unignoreApp(id, name) {
-    const ignored = getIgnoredApps();
-    const updated = ignored.filter(app => app.id !== id);
-    localStorage.setItem('ignoredApps', JSON.stringify(updated));
-
-    showToast(`${name} removed from ignored list`, 'success');
-    openIgnoredModal(); // Refresh the modal
-    loadUpdates(true); // Refresh updates view
-}
-
-// ==========================================
 // UPDATE ALL APPS
 // ==========================================
 async function updateAllApps() {
@@ -2213,7 +2068,13 @@ async function updateAllApps() {
             if (data.success && data.jobId) {
                 // Wait for this update to complete before starting next
                 await new Promise((resolve) => {
-                    pollJob(data.jobId, task, `${app.name} updated!`, `Failed to update ${app.name}`, resolve);
+                    pollJob(
+                        data.jobId,
+                        task,
+                        `${app.name} updated!`,
+                        `Failed to update ${app.name}`,
+                        resolve
+                    );
                 });
             } else {
                 updateTaskLog(task, '✗ Update request failed', 'error');
@@ -2224,7 +2085,7 @@ async function updateAllApps() {
         }
 
         // Small delay between updates
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise((r) => setTimeout(r, 1000));
     }
 
     showToast('Batch update completed!', 'success');
@@ -2232,11 +2093,14 @@ async function updateAllApps() {
 }
 
 window.copyToClipboard = function (text) {
-    navigator.clipboard.writeText(text).then(() => {
-        showToast('ID copied to clipboard!', 'success');
-    }).catch(err => {
-        console.error('Failed to copy: ', err);
-    });
+    navigator.clipboard
+        .writeText(text)
+        .then(() => {
+            showToast('ID copied to clipboard!', 'success');
+        })
+        .catch((err) => {
+            console.error('Failed to copy: ', err);
+        });
 };
 
 function setupRealTimeFiltering() {
@@ -2244,29 +2108,35 @@ function setupRealTimeFiltering() {
     const filterUpdates = document.getElementById('filter-updates');
 
     if (filterInstalled) {
-        filterInstalled.addEventListener('input', debounce((e) => {
-            const val = e.target.value;
-            // Update clear button visibility
-            const clearBtn = document.getElementById('clear-filter-installed');
-            if (clearBtn) clearBtn.style.display = val ? 'inline-block' : 'none';
-            // Re-render list
-            if (State.cache.installed) {
-                renderInstalledApps(State.cache.installed, val);
-            }
-        }, 300));
+        filterInstalled.addEventListener(
+            'input',
+            debounce((e) => {
+                const val = e.target.value;
+                // Update clear button visibility
+                const clearBtn = document.getElementById('clear-filter-installed');
+                if (clearBtn) clearBtn.style.display = val ? 'inline-block' : 'none';
+                // Re-render list
+                if (State.cache.installed) {
+                    renderInstalledApps(State.cache.installed, val);
+                }
+            }, 300)
+        );
     }
 
     if (filterUpdates) {
-        filterUpdates.addEventListener('input', debounce((e) => {
-            const val = e.target.value;
-            // Update clear button visibility
-            const clearBtn = document.getElementById('clear-filter-updates');
-            if (clearBtn) clearBtn.style.display = val ? 'inline-block' : 'none';
-            // Re-render list
-            if (State.cache.updates) {
-                renderUpdates(State.cache.updates, val);
-            }
-        }, 300));
+        filterUpdates.addEventListener(
+            'input',
+            debounce((e) => {
+                const val = e.target.value;
+                // Update clear button visibility
+                const clearBtn = document.getElementById('clear-filter-updates');
+                if (clearBtn) clearBtn.style.display = val ? 'inline-block' : 'none';
+                // Re-render list
+                if (State.cache.updates) {
+                    renderUpdates(State.cache.updates, val);
+                }
+            }, 300)
+        );
     }
 }
 
@@ -2278,14 +2148,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- HEARTBEAT & AUTO-SHUTDOWN REMOVED ---
 
-// ==========================================
-// PACKAGE DETAILS MODAL
-// ==========================================
-let currentDetailsApp = { id: '', name: '', isInstalled: false };
-
 window.showPackageDetails = async function (id, name, version, isInstalled = false) {
-    currentDetailsApp = { id, name, isInstalled };
-
     const modal = document.getElementById('details-modal');
     const backdrop = document.getElementById('details-modal-backdrop');
     const loading = document.getElementById('details-loading');
@@ -2333,20 +2196,20 @@ window.showPackageDetails = async function (id, name, version, isInstalled = fal
         installBtn.className = 'btn btn-danger';
         installBtn.onclick = () => {
             closeDetailsModal();
-            confirmUninstall(id, name);
+            window.confirmUninstall(id, name);
         };
     } else {
         installBtn.textContent = 'Install';
         installBtn.className = 'btn btn-primary';
         installBtn.onclick = () => {
             closeDetailsModal();
-            confirmInstall(id, name);
+            window.confirmInstall(id, name);
         };
     }
 
     downloadBtn.onclick = () => {
         closeDetailsModal();
-        confirmDownload(id, name);
+        window.confirmDownload(id, name);
     };
 
     // Fetch details
@@ -2358,14 +2221,16 @@ window.showPackageDetails = async function (id, name, version, isInstalled = fal
             populateDetailsModal(data.details);
         } else {
             // Show error in description
-            document.getElementById('details-description').textContent = 'Could not load package details.';
+            document.getElementById('details-description').textContent =
+                'Could not load package details.';
             document.getElementById('details-publisher-section').style.display = 'none';
             document.getElementById('details-tags-section').style.display = 'none';
             document.getElementById('details-installer-section').style.display = 'none';
             document.getElementById('details-homepage-section').style.display = 'none';
         }
     } catch (e) {
-        document.getElementById('details-description').textContent = 'Error loading package details: ' + e.message;
+        document.getElementById('details-description').textContent =
+            'Error loading package details: ' + e.message;
     }
 
     loading.style.display = 'none';
@@ -2406,9 +2271,9 @@ function populateDetailsModal(details) {
     const tagsContainer = document.getElementById('details-tags');
     const tagsSection = document.getElementById('details-tags-section');
     if (details.tags && details.tags.length > 0) {
-        tagsContainer.innerHTML = details.tags.map(tag =>
-            `<span class="details-tag">${tag}</span>`
-        ).join('');
+        tagsContainer.innerHTML = details.tags
+            .map((tag) => `<span class="details-tag">${tag}</span>`)
+            .join('');
         tagsSection.style.display = 'block';
     } else {
         tagsSection.style.display = 'none';
@@ -2488,7 +2353,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Retrieve existing value (if cached)
         if (searchInput.value.trim().length > 0) {
             welcome.style.display = 'none';
-            // Trigger search? Or just leave it? 
+            // Trigger search? Or just leave it?
             // Better to let user type or click search.
         }
         // Debounce function (500ms) to prevent too many requests
@@ -2521,7 +2386,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     emptyState.style.display = 'flex';
                 }
             } catch (e) {
-                console.error("Auto-search error", e);
+                console.error('Auto-search error', e);
                 document.getElementById('search-loading').style.display = 'none';
             }
         }, 500);
@@ -2561,7 +2426,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
 
     // ==========================================
     // CONNECTION STATUS INDICATOR
@@ -2632,7 +2496,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Just a lightweight check
             const res = await fetch('/version.json', {
                 method: 'HEAD',
-                signal: controller.signal
+                signal: controller.signal,
             });
             clearTimeout(id);
 
@@ -2641,7 +2505,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 serverFailCount = 0;
 
                 // If previously showing server error, hide it/show restored
-                if (statusEl && statusEl.classList.contains('server-down') && statusEl.classList.contains('show')) {
+                if (
+                    statusEl &&
+                    statusEl.classList.contains('server-down') &&
+                    statusEl.classList.contains('show')
+                ) {
                     showConnectionStatus('online', 'Server connection restored!', true);
                 }
             } else {
@@ -2653,7 +2521,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 serverFailCount++;
                 // Only show error after 3 consecutive failures
                 if (serverFailCount >= MAX_RETRIES) {
-                    showConnectionStatus('server-down', 'Server connection lost!\nStart EasyWinget again.');
+                    showConnectionStatus(
+                        'server-down',
+                        'Server connection lost!\nStart EasyWinget again.'
+                    );
                 }
             }
         }
@@ -2664,6 +2535,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Start polling
     checkServerStatus();
-
 }); // End DOMContentLoaded
-

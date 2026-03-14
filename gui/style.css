@@ -185,7 +185,6 @@ body {
 }
 
 @keyframes heartbeat {
-
     0%,
     100% {
         transform: scale(1);
@@ -448,7 +447,7 @@ body {
 }
 
 .icon-wrapper.icon-loading::after {
-    content: "";
+    content: '';
     width: 20px;
     height: 20px;
     border: 2px solid var(--bg-light);
@@ -689,7 +688,9 @@ body {
     /* Deep dark blue/slate */
     backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow:
+        0 12px 32px rgba(0, 0, 0, 0.6),
+        0 4px 12px rgba(0, 0, 0, 0.3);
     border-radius: 12px;
     padding: 14px 24px;
     min-width: 280px;
@@ -974,7 +975,6 @@ body.modal-open {
 }
 
 @keyframes pulse {
-
     0%,
     100% {
         opacity: 1;
@@ -1191,7 +1191,7 @@ body.modal-open {
         width: 100%;
     }
 
-    .view-header>div:last-child {
+    .view-header > div:last-child {
         width: 100%;
         justify-content: center;
         /* Center buttons */
@@ -1362,7 +1362,9 @@ body.modal-open {
     background: var(--bg-medium);
     border: 1px solid var(--border);
     border-radius: 20px;
-    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    box-shadow:
+        0 25px 80px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.05);
     z-index: 2600;
     overflow: hidden;
     display: flex;
@@ -1607,27 +1609,27 @@ body.modal-open {
 }
 
 /* Tag colors - rotating palette */
-.details-tag:nth-child(5n+1) {
+.details-tag:nth-child(5n + 1) {
     background: rgba(99, 102, 241, 0.2);
     color: #a5b4fc;
 }
 
-.details-tag:nth-child(5n+2) {
+.details-tag:nth-child(5n + 2) {
     background: rgba(16, 185, 129, 0.2);
     color: #6ee7b7;
 }
 
-.details-tag:nth-child(5n+3) {
+.details-tag:nth-child(5n + 3) {
     background: rgba(245, 158, 11, 0.2);
     color: #fcd34d;
 }
 
-.details-tag:nth-child(5n+4) {
+.details-tag:nth-child(5n + 4) {
     background: rgba(236, 72, 153, 0.2);
     color: #f9a8d4;
 }
 
-.details-tag:nth-child(5n+5) {
+.details-tag:nth-child(5n + 5) {
     background: rgba(56, 189, 248, 0.2);
     color: #7dd3fc;
 }
@@ -1651,7 +1653,7 @@ body.modal-open {
 }
 
 .details-homepage-link::after {
-    content: "→";
+    content: '→';
     transition: transform 0.2s;
 }
 
@@ -1875,7 +1877,9 @@ body.modal-open {
     gap: 12px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     z-index: 9999;
-    transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+    transition:
+        transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+        opacity 0.3s ease;
     opacity: 0;
     pointer-events: none;
     /* Let clicks pass through when hidden */
@@ -1934,7 +1938,6 @@ body.modal-open {
 }
 
 @keyframes bounce {
-
     0%,
     100% {
         transform: translateY(0);
