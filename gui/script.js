@@ -3,6 +3,17 @@
  * Added: Task modal, minimize/close, search filters
  */
 
+const POLL_INTERVAL = 1000;
+const MAX_POLL_ERRORS = 5;
+const PROGRESS_LINE_DELAY = 100;
+const REGULAR_LINE_DELAY = 10;
+const SERVER_CHECK_INTERVAL = 5000;
+const SERVER_TIMEOUT = 3000;
+const SERVER_MAX_RETRIES = 3;
+const SERVER_PAUSE_ON_ERROR = 30000; // Pause 30s after showing error
+const DEBOUNCE_DELAY = 500;
+const MIN_SEARCH_LENGTH = 2;
+
 // ==========================================
 // STATE
 // ==========================================
@@ -31,6 +42,33 @@ function debounce(func, wait) {
     };
 }
 
+/**
+ * Escapes HTML special characters to prevent XSS.
+ */
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
+ * Escapes a string for safe use inside an inline onclick attribute value.
+ * Handles both HTML entity encoding and JS string escaping.
+ */
+function escapeOnclick(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 // ==========================================
 // DOM ELEMENTS
 // ==========================================
@@ -47,6 +85,7 @@ const DOM = {
         searchLoading: document.getElementById('search-loading'),
         installedList: document.getElementById('installed-list'),
         updatesGrid: document.getElementById('updates-grid'),
+        downloadedList: document.getElementById('downloaded-list'),
     },
     inputs: {
         search: document.getElementById('search-input'),
@@ -70,7 +109,6 @@ const DOM = {
         updates: document.getElementById('update-badge'),
         downloaded: document.getElementById('downloaded-badge'),
     },
-    loading: document.getElementById('loading-overlay'),
     toasts: document.getElementById('toast-container'),
 };
 
@@ -196,26 +234,43 @@ function getDomain(id) {
 }
 
 // Intersection Observer for Lazy Loading
-const iconObserver = new IntersectionObserver(
-    (entries, observer) => {
-        entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-                const img = entry.target;
-                observer.unobserve(img);
-                loadIcon(img);
-            }
-        });
-    },
-    { rootMargin: '100px' }
-);
+let iconObserver = null;
+
+function initIconObserver() {
+    if (iconObserver) {
+        iconObserver.disconnect();
+    }
+    iconObserver = new IntersectionObserver(
+        (entries, observer) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    observer.unobserve(img);
+                    loadIcon(img);
+                }
+            });
+        },
+        { rootMargin: '100px' }
+    );
+}
 
 function observeIcons() {
+    if (!iconObserver) {
+        initIconObserver();
+    }
     document.querySelectorAll('img.lazy-icon').forEach((img) => {
         // Only observe if not already processed
         if (!img.dataset.loaded) {
             iconObserver.observe(img);
         }
     });
+}
+
+function disconnectIconObserver() {
+    if (iconObserver) {
+        iconObserver.disconnect();
+        iconObserver = null;
+    }
 }
 
 // Helper to clean up UI on success
@@ -518,17 +573,26 @@ function customConfirm(title, message, icon = '⚠️') {
         iconEl.textContent = icon;
         overlay.style.display = 'flex';
 
-        const handleOk = () => {
-            overlay.style.display = 'none';
+        let resolved = false;
+
+        const cleanup = () => {
             okBtn.removeEventListener('click', handleOk);
             cancelBtn.removeEventListener('click', handleCancel);
+        };
+
+        const handleOk = () => {
+            if (resolved) return;
+            resolved = true;
+            overlay.style.display = 'none';
+            cleanup();
             resolve(true);
         };
 
         const handleCancel = () => {
+            if (resolved) return;
+            resolved = true;
             overlay.style.display = 'none';
-            okBtn.removeEventListener('click', handleOk);
-            cancelBtn.removeEventListener('click', handleCancel);
+            cleanup();
             resolve(false);
         };
 
@@ -683,6 +747,10 @@ function showTaskModal(title, appId) {
     DOM.modal.container.style.display = 'flex';
     document.body.classList.add('modal-open');
 
+    // Setup focus trap
+    if (cleanupFocusTrap) cleanupFocusTrap();
+    cleanupFocusTrap = trapFocus(DOM.modal.container);
+
     // Show cancel button (Reset state)
     const modalActions = document.getElementById('modal-actions');
     if (modalActions) {
@@ -730,6 +798,12 @@ function closeModal() {
 
     // Unlock body scroll
     document.body.classList.remove('modal-open');
+
+    // Cleanup focus trap
+    if (cleanupFocusTrap) {
+        cleanupFocusTrap();
+        cleanupFocusTrap = null;
+    }
 
     // Hide cancel button for next time
     const modalActions = document.getElementById('modal-actions');
@@ -873,35 +947,45 @@ async function searchApps(query) {
 // ==========================================
 // POLLING HELPER
 // ==========================================
-async function pollJob(jobId, task, successMsg, failMsg, onSuccess) {
+async function pollJob(jobId, task, successMsg, failMsg, onComplete) {
     if (!jobId || !task) return;
 
+    // Store polling state on task to allow cancellation
+    let cancelled = false;
     let errorCount = 0;
 
+    // Track in activeTasks for background logging
+    State.activeTasks[jobId] = task;
+
     const checkStatus = async () => {
+        // Check if task was cancelled
+        if (cancelled || task.cancelled) {
+            delete State.activeTasks[jobId];
+            return;
+        }
+
         try {
             const data = await apiCall(`/api/status?id=${jobId}`);
 
             if (!data) {
                 errorCount++;
-                if (errorCount > 5) {
+                if (errorCount > MAX_POLL_ERRORS) {
                     updateTaskLog(task, 'Lost connection to task.', 'error');
-                    return; // Stop polling
+                    delete State.activeTasks[jobId];
+                    if (onComplete) onComplete();
+                    return;
                 }
             } else {
-                errorCount = 0; // Reset error count on success
+                errorCount = 0;
 
                 // Process new output lines
                 if (data.output) {
-                    // Split by any CR/LF to handle winget's animation updates which use \r
                     const allLines = data.output.split(/[\r\n]+/);
 
                     // Only take new lines
                     const newLines = allLines.slice(task.processedLines || 0);
-                    task.processedLines = allLines.length; // Update pointer immediately
+                    task.processedLines = allLines.length;
 
-                    // Process lines with visual delay to smooth out animations
-                    // We await this so next poll doesn't happen until we finish animating this batch
                     if (newLines.length > 0) {
                         await processLogLinesWithDelay(task, newLines);
                     }
@@ -911,26 +995,33 @@ async function pollJob(jobId, task, successMsg, failMsg, onSuccess) {
                     if (data.success) {
                         updateTaskLog(task, '✓ Task Completed!', 'success');
                         showToast(successMsg, 'success');
-                        if (onSuccess) onSuccess();
                     } else {
                         updateTaskLog(task, '✗ Task Failed', 'error');
                         updateTaskLog(task, 'Check logs for details.', 'error');
                         showToast(failMsg, 'error');
                     }
-                    return; // Stop polling
+                    delete State.activeTasks[jobId];
+                    if (onComplete) onComplete();
+                    return;
                 }
             }
         } catch (e) {
             log('Polling error', e);
         }
 
-        // Schedule next poll
-        // Poll once per second instead of spam
-        setTimeout(checkStatus, 200);
+        // Poll every POLL_INTERVAL
+        setTimeout(checkStatus, POLL_INTERVAL);
     };
 
     // Start the loop
     checkStatus();
+
+    // Return cancel function
+    return () => {
+        cancelled = true;
+        task.cancelled = true;
+        delete State.activeTasks[jobId];
+    };
 }
 
 async function processLogLinesWithDelay(task, lines) {
@@ -945,17 +1036,17 @@ async function processLogLinesWithDelay(task, lines) {
         const isProgress =
             trimmed.includes('█') ||
             trimmed.includes('▒') ||
-            trimmed.match(/[\-\\\|\/]/) ||
+            trimmed.match(/[\-\\|\/]/) ||
             trimmed.match(/\d+(\.\d+)?\s*(KB|MB|GB)\s*\/\s*\d+(\.\d+)?\s*(KB|MB|GB)/i);
 
         updateTaskLog(task, trimmed, 'info');
 
         // Add delay for progress lines so user can SEE each update
-        // 100ms = smooth animation, 10ms for regular text
+        // PROGRESS_LINE_DELAY = smooth animation, REGULAR_LINE_DELAY for regular text
         if (isProgress && i < lines.length - 1) {
-            await new Promise((r) => setTimeout(r, 100));
+            await new Promise((r) => setTimeout(r, PROGRESS_LINE_DELAY));
         } else if (!isProgress && i < lines.length - 1) {
-            await new Promise((r) => setTimeout(r, 10));
+            await new Promise((r) => setTimeout(r, REGULAR_LINE_DELAY));
         }
 
         // --- NEW: Detect Install Phase and Hide Cancel Button ---
@@ -1007,7 +1098,7 @@ window.confirmInstall = async function (id, name) {
                         data.jobId,
                         task,
                         `${safeName} installed successfully!`,
-                        `Failed by install ${safeName}`,
+                        `Failed to install ${safeName}`,
                         () => {
                             fetchInstalled(true);
                         }
@@ -1181,20 +1272,23 @@ function renderSearchResults(results) {
             const hasUpdate =
                 State.cache.updates && State.cache.updates.some((u) => u.id === app.id);
 
+            const safeId = escapeOnclick(app.id);
+            const safeName = escapeOnclick(app.name);
+
             if (hasUpdate) {
                 actionButtons = `
-                <button class="btn btn-primary" onclick="confirmUpdate('${app.id}', '${app.name}')">Update</button>
-                <button class="btn btn-secondary" onclick="confirmDownload('${app.id}', '${app.name}')">Download</button>
+                <button class="btn btn-primary" onclick="confirmUpdate('${safeId}', '${safeName}')">Update</button>
+                <button class="btn btn-secondary" onclick="confirmDownload('${safeId}', '${safeName}')">Download</button>
             `;
             } else if (isInstalled) {
                 actionButtons = `
                 <button class="btn btn-secondary" disabled style="opacity:0.7; cursor:default;">Installed</button>
-                <button class="btn btn-secondary" onclick="confirmDownload('${app.id}', '${app.name}')">Download</button>
+                <button class="btn btn-secondary" onclick="confirmDownload('${safeId}', '${safeName}')">Download</button>
             `;
             } else {
                 actionButtons = `
-                <button class="btn btn-primary" onclick="confirmInstall('${app.id}', '${app.name}')">Install</button>
-                <button class="btn btn-secondary" onclick="confirmDownload('${app.id}', '${app.name}')">Download</button>
+                <button class="btn btn-primary" onclick="confirmInstall('${safeId}', '${safeName}')">Install</button>
+                <button class="btn btn-secondary" onclick="confirmDownload('${safeId}', '${safeName}')">Download</button>
             `;
             }
 
@@ -1202,16 +1296,16 @@ function renderSearchResults(results) {
 
             return `
         <div class="app-card">
-            <button class="btn-info-corner" onclick="showPackageDetails('${app.id}', '${app.name.replace(/'/g, "\\'")}', '${app.version || ''}', ${isInstalled})" title="View Details">${infoIconSvg}</button>
+            <button class="btn-info-corner" onclick="showPackageDetails('${safeId}', '${safeName}', '${escapeOnclick(app.version || '')}', ${isInstalled})" title="View Details">${infoIconSvg}</button>
             ${getAppIconHTML(app)}
-            <h3>${app.name}</h3>
+            <h3>${escapeHtml(app.name)}</h3>
             <div 
                 class="app-id" 
                 title="Click to copy ID" 
                 style="cursor: pointer;" 
-                onclick="copyToClipboard('${app.id}')"
-            >${app.id}</div>
-            <div class="version">v${app.version || 'Unknown'}</div>
+                onclick="copyToClipboard('${safeId}')"
+            >${escapeHtml(app.id)}</div>
+            <div class="version">v${escapeHtml(app.version || 'Unknown')}</div>
             <div class="actions">
                 ${actionButtons}
             </div>
@@ -1260,14 +1354,14 @@ function renderInstalledApps(apps, filter = '') {
         <div class="app-row">
             ${getAppIconHTML(app, true)}
             <div class="info">
-                <h3>${app.name}</h3>
+                <h3>${escapeHtml(app.name)}</h3>
                 <p 
                     title="Click to copy ID" 
                     style="cursor: pointer; display: inline-block;" 
-                    onclick="copyToClipboard('${app.id}')"
-                >${app.id} • v${app.version || '?'}</p>
+                    onclick="copyToClipboard('${escapeOnclick(app.id)}')"
+                >${escapeHtml(app.id)} • v${escapeHtml(app.version || '?')}</p>
             </div>
-            <button class="btn btn-danger" onclick="confirmUninstall('${app.id}', '${app.name}')">Uninstall</button>
+            <button class="btn btn-danger" onclick="confirmUninstall('${escapeOnclick(app.id)}', '${escapeOnclick(app.name)}')">Uninstall</button>
         </div>
     `
         )
@@ -1318,20 +1412,20 @@ function renderUpdates(updates, filter = '') {
             (app) => `
         <div class="app-card">
             ${getAppIconHTML(app)}
-            <h3>${app.name}</h3>
+            <h3>${escapeHtml(app.name)}</h3>
             <div 
                 class="app-id" 
                 title="Click to copy ID" 
                 style="cursor: pointer;" 
-                onclick="copyToClipboard('${app.id}')"
-            >${app.id}</div>
+                onclick="copyToClipboard('${escapeOnclick(app.id)}')"
+            >${escapeHtml(app.id)}</div>
             <div class="version">
-                v${app.version || 'Unknown'}
-                ${app.current ? `<br><small style="color:var(--text-secondary)">Current: ${app.current}</small>` : ''}
+                v${escapeHtml(app.version || 'Unknown')}
+                ${app.current ? `<br><small style="color:var(--text-secondary)">Current: ${escapeHtml(app.current)}</small>` : ''}
             </div>
             <div class="actions">
-                <button class="btn btn-primary" style="flex: 2;" onclick="confirmUpdate('${app.id}', '${app.name}')">Update</button>
-                <button class="btn btn-secondary" style="flex: 1;" onclick="confirmIgnore('${app.id}', '${app.name}')" title="Ignore this update">Ignore</button>
+                <button class="btn btn-primary" style="flex: 2;" onclick="confirmUpdate('${escapeOnclick(app.id)}', '${escapeOnclick(app.name)}')">Update</button>
+                <button class="btn btn-secondary" style="flex: 1;" onclick="confirmIgnore('${escapeOnclick(app.id)}', '${escapeOnclick(app.name)}')" title="Ignore this update">Ignore</button>
             </div>
         </div>
     `
@@ -1636,22 +1730,20 @@ window.openDownloadedFolder = function (fileName) {
 function switchView(viewName) {
     log(`Switching to: ${viewName}`);
 
+    // Disconnect observer to prevent memory leak when switching views
+    disconnectIconObserver();
+
     // RESET LOGIC: Clear state before switching
     if (viewName !== 'search') {
         // Clear search if leaving search
         if (DOM.inputs.search) DOM.inputs.search.value = '';
         if (DOM.containers.searchResults) DOM.containers.searchResults.innerHTML = '';
-        if (DOM.containers.searchEmpty) DOM.containers.searchEmpty.style.display = 'block';
+        if (DOM.containers.searchEmpty) DOM.containers.searchEmpty.style.display = 'none';
         if (DOM.containers.searchLoading) DOM.containers.searchLoading.style.display = 'none';
         const welcome = document.getElementById('search-welcome');
         if (welcome) welcome.style.display = 'block';
         const clearBtn = document.getElementById('clear-search');
         if (clearBtn) clearBtn.style.display = 'none';
-
-        // Hide initial empty text if we want a fresh start
-        if (DOM.containers.searchEmpty)
-            DOM.containers.searchEmpty.innerHTML =
-                '<div class="empty-icon">🔍</div><h3>Search Packages</h3><p>Type to search...</p>';
     }
 
     // Reset filters
@@ -1672,9 +1764,7 @@ function switchView(viewName) {
     // Reset Scroll Positions
     if (DOM.containers.installedList) DOM.containers.installedList.scrollTop = 0;
     if (DOM.containers.updatesGrid) DOM.containers.updatesGrid.scrollTop = 0;
-    if (DOM.containers.downloadedList) DOM.containers.downloadedList.scrollTop = 0; // Assuming this exists or using ID
-    const downloadedList = document.getElementById('downloaded-list');
-    if (downloadedList) downloadedList.scrollTop = 0;
+    if (DOM.containers.downloadedList) DOM.containers.downloadedList.scrollTop = 0;
 
     // Standard View Switching
     State.currentView = viewName;
@@ -1784,10 +1874,8 @@ async function handleSearch(query) {
     loading.style.display = 'none';
     results.innerHTML = '';
 
-    if (trimmed.length < 2) {
-        empty.innerHTML =
-            '<div class="empty-icon">✍️</div><h3>Start typing</h3><p>Enter at least 2 characters</p>';
-        empty.style.display = 'block';
+    if (trimmed.length < MIN_SEARCH_LENGTH) {
+        showToast('Enter at least 2 characters to search', 'info');
         return;
     }
 
@@ -2001,7 +2089,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Enter to search
         if (e.key === 'Enter' && document.activeElement.id === 'search-input') {
-            handleSearch();
+            handleSearch(document.activeElement.value);
         }
     });
 
@@ -2023,6 +2111,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Start on search view
     switchView('search');
+
+    // Setup event delegation
+    setupEventDelegation();
 
     // Background pre-loading
     log('Starting background data fetch...');
@@ -2103,48 +2194,69 @@ window.copyToClipboard = function (text) {
         });
 };
 
-function setupRealTimeFiltering() {
-    const filterInstalled = document.getElementById('filter-installed');
-    const filterUpdates = document.getElementById('filter-updates');
-
-    if (filterInstalled) {
-        filterInstalled.addEventListener(
-            'input',
-            debounce((e) => {
-                const val = e.target.value;
-                // Update clear button visibility
-                const clearBtn = document.getElementById('clear-filter-installed');
-                if (clearBtn) clearBtn.style.display = val ? 'inline-block' : 'none';
-                // Re-render list
-                if (State.cache.installed) {
-                    renderInstalledApps(State.cache.installed, val);
-                }
-            }, 300)
+// Event delegation for copy-to-clipboard clicks
+function setupEventDelegation() {
+    document.addEventListener('click', (e) => {
+        // Handle clickable IDs (copy to clipboard)
+        const clickableId = e.target.closest(
+            '.clickable-id, .app-id[onclick*="copyToClipboard"], [onclick*="copyToClipboard"]'
         );
-    }
+        if (clickableId) {
+            e.preventDefault();
+            e.stopPropagation();
+            window.copyToClipboard(clickableId.textContent.trim());
+        }
+    });
 
-    if (filterUpdates) {
-        filterUpdates.addEventListener(
-            'input',
-            debounce((e) => {
-                const val = e.target.value;
-                // Update clear button visibility
-                const clearBtn = document.getElementById('clear-filter-updates');
-                if (clearBtn) clearBtn.style.display = val ? 'inline-block' : 'none';
-                // Re-render list
-                if (State.cache.updates) {
-                    renderUpdates(State.cache.updates, val);
-                }
-            }, 300)
-        );
-    }
+    // Handle keyboard Enter on clickable IDs
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            const clickableId = e.target.closest('.clickable-id');
+            if (clickableId) {
+                e.preventDefault();
+                window.copyToClipboard(clickableId.textContent.trim());
+            }
+        }
+    });
 }
 
-// Call this in initialization
-document.addEventListener('DOMContentLoaded', () => {
-    // ... existing init code ...
-    setupRealTimeFiltering();
-});
+// ==========================================
+// FOCUS TRAPPING FOR MODALS
+// ==========================================
+function trapFocus(modalElement) {
+    const focusableElements = modalElement.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
+
+    function handleKeyDown(e) {
+        if (e.key !== 'Tab') return;
+
+        if (e.shiftKey) {
+            // Shift + Tab
+            if (document.activeElement === firstFocusable) {
+                e.preventDefault();
+                lastFocusable.focus();
+            }
+        } else {
+            // Tab
+            if (document.activeElement === lastFocusable) {
+                e.preventDefault();
+                firstFocusable.focus();
+            }
+        }
+    }
+
+    modalElement.addEventListener('keydown', handleKeyDown);
+
+    // Return cleanup function
+    return () => {
+        modalElement.removeEventListener('keydown', handleKeyDown);
+    };
+}
+
+let cleanupFocusTrap = null;
 
 // --- HEARTBEAT & AUTO-SHUTDOWN REMOVED ---
 
@@ -2158,6 +2270,10 @@ window.showPackageDetails = async function (id, name, version, isInstalled = fal
     backdrop.style.display = 'block';
     modal.style.display = 'flex';
     setTimeout(() => modal.classList.add('show'), 10);
+
+    // Setup focus trap for details modal
+    if (cleanupFocusTrap) cleanupFocusTrap();
+    cleanupFocusTrap = trapFocus(modal);
 
     // Set initial header info
     document.getElementById('details-name').textContent = name;
@@ -2267,12 +2383,12 @@ function populateDetailsModal(details) {
     document.getElementById('row-author').style.display = details.author ? 'flex' : 'none';
     document.getElementById('row-copyright').style.display = details.copyright ? 'flex' : 'none';
 
-    // Tags
+    // Tags (with XSS protection)
     const tagsContainer = document.getElementById('details-tags');
     const tagsSection = document.getElementById('details-tags-section');
     if (details.tags && details.tags.length > 0) {
         tagsContainer.innerHTML = details.tags
-            .map((tag) => `<span class="details-tag">${tag}</span>`)
+            .map((tag) => `<span class="details-tag">${escapeHtml(tag)}</span>`)
             .join('');
         tagsSection.style.display = 'block';
     } else {
@@ -2296,7 +2412,8 @@ function populateDetailsModal(details) {
     const homepageEl = document.getElementById('details-homepage');
     if (details.homepage) {
         homepageEl.href = details.homepage;
-        homepageEl.textContent = details.homepage.replace(/^https?:\/\//, '').replace(/\/$/, '');
+        homepageEl.textContent = details.homepage;
+        homepageEl.title = details.homepage;
         homepageSection.style.display = 'block';
     } else {
         homepageSection.style.display = 'none';
@@ -2306,6 +2423,12 @@ function populateDetailsModal(details) {
 function closeDetailsModal() {
     const modal = document.getElementById('details-modal');
     const backdrop = document.getElementById('details-modal-backdrop');
+
+    // Cleanup focus trap
+    if (cleanupFocusTrap) {
+        cleanupFocusTrap();
+        cleanupFocusTrap = null;
+    }
 
     modal.classList.remove('show');
     setTimeout(() => {
@@ -2353,12 +2476,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Retrieve existing value (if cached)
         if (searchInput.value.trim().length > 0) {
             welcome.style.display = 'none';
-            // Trigger search? Or just leave it?
-            // Better to let user type or click search.
         }
-        // Debounce function (500ms) to prevent too many requests
+
+        // Timer for short input toast
+        let searchTypingTimer = null;
+
+        // Debounce function (DEBOUNCE_DELAY) to prevent too many requests
         const debouncedSearch = debounce(async (query) => {
-            if (query.length < 2) return;
+            if (query.length < MIN_SEARCH_LENGTH) return;
 
             // Show loading state
             document.getElementById('search-loading').style.display = 'flex';
@@ -2379,17 +2504,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     const emptyState = document.getElementById('search-empty');
                     emptyState.innerHTML = `
-                        <div class="empty-icon">😕</div>
-                        <h3>No results found</h3>
-                        <p>We couldn't find anything for "${query.replace(/</g, '&lt;')}"</p>
-                    `;
+                    <div class="empty-icon">😕</div>
+                    <h3>No results found</h3>
+                    <p>We couldn't find anything for "${escapeHtml(query)}"</p>
+                `;
                     emptyState.style.display = 'flex';
                 }
             } catch (e) {
                 console.error('Auto-search error', e);
                 document.getElementById('search-loading').style.display = 'none';
             }
-        }, 500);
+        }, DEBOUNCE_DELAY);
 
         searchInput.addEventListener('input', (e) => {
             const query = e.target.value.trim();
@@ -2407,21 +2532,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 const welcome = document.getElementById('search-welcome');
                 if (welcome) welcome.style.display = 'none';
 
-                if (query.length >= 2) {
+                if (query.length >= MIN_SEARCH_LENGTH) {
                     // Valid Query: Trigger Search
                     debouncedSearch(query);
                 } else {
-                    // Too Short: Show "Start typing"
+                    // Too Short: Show toast only after delay (1.5s)
                     const emptyState = document.getElementById('search-empty');
-                    document.getElementById('search-results').innerHTML = ''; // Clear previous results
+                    document.getElementById('search-results').innerHTML = '';
                     document.getElementById('search-loading').style.display = 'none';
+                    emptyState.style.display = 'none';
 
-                    emptyState.innerHTML = `
-                        <div class="empty-icon">✍️</div>
-                        <h3>Start typing</h3>
-                        <p>Enter at least 2 characters</p>
-                    `;
-                    emptyState.style.display = 'flex';
+                    // Clear any existing timer
+                    if (searchTypingTimer) clearTimeout(searchTypingTimer);
+
+                    searchTypingTimer = setTimeout(() => {
+                        // Only show if still short
+                        if (
+                            searchInput.value.trim().length < MIN_SEARCH_LENGTH &&
+                            searchInput.value.trim().length > 0
+                        ) {
+                            showToast('Enter at least 2 characters to search', 'info');
+                        }
+                    }, 1500);
                 }
             }
         });
@@ -2434,6 +2566,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusIcon = statusEl ? statusEl.querySelector('.status-icon') : null;
     const statusText = statusEl ? statusEl.querySelector('.status-text') : null;
     let serverCheckInterval = null;
+    let serverFailCount = 0;
+    let serverErrorShown = false;
 
     function showConnectionStatus(type, message, autoHide = false) {
         if (!statusEl || !statusIcon || !statusText) return;
@@ -2461,7 +2595,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (autoHide) {
             setTimeout(() => {
                 statusEl.classList.remove('show');
-            }, 1000); // Hide after 1s (was 2s)
+            }, 1000);
         }
     }
 
@@ -2473,32 +2607,42 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('online', () => {
         showConnectionStatus('online', 'Yay! Internet is back!', true);
         // Check server immediately when internet comes back
-        clearTimeout(serverCheckInterval);
+        stopServerPolling();
+        serverErrorShown = false;
+        serverFailCount = 0;
         checkServerStatus();
     });
 
-    // Server Status Check
-    // Server Status Check
-    let serverFailCount = 0;
-    const MAX_RETRIES = 3;
+    function stopServerPolling() {
+        if (serverCheckInterval) {
+            clearTimeout(serverCheckInterval);
+            serverCheckInterval = null;
+        }
+    }
 
     async function checkServerStatus() {
         // If computer is offline, don't blame the server
         if (!navigator.onLine) {
-            setTimeout(checkServerStatus, 5000);
+            serverCheckInterval = setTimeout(checkServerStatus, SERVER_CHECK_INTERVAL);
+            return;
+        }
+
+        // If we've shown server error, pause polling for a while
+        if (serverErrorShown) {
+            serverCheckInterval = setTimeout(checkServerStatus, SERVER_PAUSE_ON_ERROR);
             return;
         }
 
         try {
             const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), 3000); // Increased timeout to 3s
+            const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT);
 
             // Just a lightweight check
             const res = await fetch('/version.json', {
                 method: 'HEAD',
                 signal: controller.signal,
             });
-            clearTimeout(id);
+            clearTimeout(timeoutId);
 
             if (res.ok) {
                 // Reset fail count on success
@@ -2511,6 +2655,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     statusEl.classList.contains('show')
                 ) {
                     showConnectionStatus('online', 'Server connection restored!', true);
+                    serverErrorShown = false;
                 }
             } else {
                 throw new Error('Server not OK');
@@ -2519,8 +2664,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Only show server error if internet is presumably UP
             if (navigator.onLine) {
                 serverFailCount++;
-                // Only show error after 3 consecutive failures
-                if (serverFailCount >= MAX_RETRIES) {
+                // Only show error after consecutive failures
+                if (serverFailCount >= SERVER_MAX_RETRIES && !serverErrorShown) {
+                    serverErrorShown = true;
                     showConnectionStatus(
                         'server-down',
                         'Server connection lost!\nStart EasyWinget again.'
@@ -2529,8 +2675,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Poll every 5 seconds (increased from 2s to reduce load)
-        serverCheckInterval = setTimeout(checkServerStatus, 5000);
+        // Poll every interval
+        serverCheckInterval = setTimeout(checkServerStatus, SERVER_CHECK_INTERVAL);
     }
 
     // Start polling

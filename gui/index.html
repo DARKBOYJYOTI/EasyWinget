@@ -18,7 +18,7 @@
                         <span class="logo-icon">📦</span>
                         <h1>EasyWinGet</h1>
                     </div>
-                    <div class="version-badge" id="app-version">v3.1.0</div>
+                    <div class="version-badge" id="app-version">loading...</div>
                 </div>
                 <div class="sidebar-separator"></div>
 
@@ -291,9 +291,17 @@
         </div>
 
         <!-- Custom Confirm Dialog -->
-        <div id="confirm-dialog" class="confirm-overlay" style="display: none">
+        <div
+            id="confirm-dialog"
+            class="confirm-overlay"
+            style="display: none"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+            aria-describedby="confirm-message"
+        >
             <div class="confirm-box">
-                <div class="confirm-icon">⚠️</div>
+                <div class="confirm-icon" aria-hidden="true">⚠️</div>
                 <h3 id="confirm-title">Confirm Action</h3>
                 <p id="confirm-message">Are you sure?</p>
                 <div class="confirm-actions">
@@ -307,7 +315,14 @@
         <div id="modal-backdrop" class="modal-backdrop" style="display: none"></div>
 
         <!-- Task Modal -->
-        <div id="task-modal" class="task-modal" style="display: none">
+        <div
+            id="task-modal"
+            class="task-modal"
+            style="display: none"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
+        >
             <div class="modal-header">
                 <h3 id="modal-title">Task Progress</h3>
                 <div class="modal-controls">
@@ -335,20 +350,27 @@
                 </div>
                 <div id="progress-text" class="progress-text">Starting...</div>
             </div>
-            <div id="modal-output" class="modal-output"></div>
+            <div id="modal-output" class="modal-output" aria-live="polite" aria-atomic="true"></div>
             <div class="modal-actions" id="modal-actions" style="display: none">
                 <button id="cancel-task-btn" class="btn btn-danger">Cancel</button>
             </div>
         </div>
 
         <!-- Ignored Apps Modal -->
-        <div id="ignored-modal" class="modal-backdrop" style="display: none; z-index: 2000">
+        <div
+            id="ignored-modal"
+            class="modal-backdrop"
+            style="display: none; z-index: 2000"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ignored-modal-title"
+        >
             <div
                 class="task-modal"
                 style="display: flex; flex-direction: column; height: 60vh; max-height: 500px"
             >
                 <div class="modal-header">
-                    <h3>Ignored Updates</h3>
+                    <h3 id="ignored-modal-title">Ignored Updates</h3>
                     <div class="modal-controls">
                         <button
                             id="close-ignored-modal"
@@ -370,6 +392,7 @@
                         display: flex;
                         flex-direction: column;
                     "
+                    aria-live="polite"
                 >
                     <!-- List items -->
                 </div>
@@ -387,7 +410,14 @@
             class="modal-backdrop"
             style="display: none; z-index: 2500"
         ></div>
-        <div id="details-modal" class="details-modal" style="display: none">
+        <div
+            id="details-modal"
+            class="details-modal"
+            style="display: none"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="details-name"
+        >
             <button
                 id="close-details-modal"
                 class="details-close-btn"
@@ -406,10 +436,12 @@
                     <div class="details-meta">
                         <span
                             id="details-id"
-                            class="details-id"
+                            class="details-id clickable-id"
                             title="Click to copy ID"
                             style="cursor: pointer"
-                            onclick="copyToClipboard(this.textContent)"
+                            tabindex="0"
+                            role="button"
+                            aria-label="Click to copy package ID"
                             >package.id</span
                         >
                         <span id="details-version" class="details-version">v1.0.0</span>
@@ -434,7 +466,7 @@
 
                     <!-- Publisher Info -->
                     <div id="details-publisher-section" class="details-section">
-                        <h4>👤 Publisher Info</h4>
+                        <h4>📋 Publisher Info</h4>
                         <div class="details-grid">
                             <div class="details-row" id="row-publisher">
                                 <span class="label">Publisher</span>
@@ -490,14 +522,19 @@
                         style="display: none"
                     >
                         <h4>🌐 Homepage</h4>
-                        <a
-                            id="details-homepage"
-                            class="details-homepage-link"
-                            href="#"
-                            target="_blank"
-                            rel="noopener"
-                            >Visit Website</a
-                        >
+                        <div class="details-grid">
+                            <div class="details-row details-url-row" id="row-homepage">
+                                <span class="label">Website</span>
+                                <a
+                                    id="details-homepage"
+                                    class="value details-link"
+                                    href="#"
+                                    target="_blank"
+                                    rel="noopener"
+                                    >-</a
+                                >
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -16,6 +16,14 @@
     --text-secondary: #94a3b8;
     --border: #334155;
     --shadow: rgba(0, 0, 0, 0.3);
+    --info-blue: #3b82f6;
+    --folder-blue: #3b82f6;
+    --folder-blue-hover: #2563eb;
+    --bg-light-hover: #475569;
+    --white: #ffffff;
+    --black: #000000;
+    --toast-bg: rgba(15, 23, 42, 0.95);
+    --toast-border: rgba(255, 255, 255, 0.1);
 }
 
 * {
@@ -393,8 +401,9 @@ body {
 }
 
 .app-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px var(--shadow);
+    box-shadow:
+        0 0 20px rgba(99, 102, 241, 0.3),
+        0 0 40px rgba(99, 102, 241, 0.1);
 }
 
 .app-card .icon {
@@ -563,19 +572,19 @@ body {
 }
 
 .btn-secondary:hover {
-    background: #475569;
-    color: white;
+    background: var(--bg-light-hover);
+    color: var(--white);
 }
 
 /* Specific styling for Open Folder button */
 .btn-folder {
-    background: #3b82f6;
-    color: white;
+    background: var(--folder-blue);
+    color: var(--white);
 }
 
 .btn-folder:hover {
-    background: #2563eb;
-    color: white;
+    background: var(--folder-blue-hover);
+    color: var(--white);
 }
 
 .btn-danger {
@@ -684,10 +693,10 @@ body {
 
 .toast {
     pointer-events: auto;
-    background: rgba(15, 23, 42, 0.95);
+    background: var(--toast-bg);
     /* Deep dark blue/slate */
     backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--toast-border);
     box-shadow:
         0 12px 32px rgba(0, 0, 0, 0.6),
         0 4px 12px rgba(0, 0, 0, 0.3);
@@ -695,7 +704,7 @@ body {
     padding: 14px 24px;
     min-width: 280px;
     max-width: 450px;
-    color: #f1f5f9;
+    color: var(--text-primary);
     font-weight: 500;
     font-size: 0.95rem;
     display: flex;
@@ -1023,7 +1032,7 @@ body.modal-open {
 }
 
 .modal-output .output-line.info {
-    color: #3b82f6;
+    color: var(--info-blue);
     /* Brighter blue for info */
 }
 
@@ -1474,7 +1483,6 @@ body.modal-open {
 .details-id:hover {
     background: var(--bg-light);
     color: var(--primary);
-    transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -1605,7 +1613,8 @@ body.modal-open {
 }
 
 .details-tag:hover {
-    transform: translateY(-2px);
+    background: var(--primary);
+    color: var(--white);
 }
 
 /* Tag colors - rotating palette */
@@ -1704,8 +1713,7 @@ body.modal-open {
 
 .btn-info-corner:hover {
     background: var(--primary);
-    color: white;
-    transform: scale(1.15);
+    color: var(--white);
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
 }
 
@@ -1836,11 +1844,8 @@ body.modal-open {
 }
 
 .welcome-features span:hover {
-    background: var(--bg-light);
-    color: var(--text-primary);
-    transform: translateY(-2px);
-    border-color: var(--primary);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    background: var(--bg-medium);
+    box-shadow: 0 4px 12px var(--shadow);
 }
 
 @keyframes float {
