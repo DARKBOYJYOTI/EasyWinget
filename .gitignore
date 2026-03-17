@@ -7,7 +7,7 @@ gui/cache/
 utils/cache/
 jobs/*
 Downloads/*
-data/icon/*
+data/icons/*
 data/*.json
 *.json.bak
 

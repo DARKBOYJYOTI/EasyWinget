@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { spawn, exec } = require('child_process');
+const { spawn, execFile } = require('child_process');
 
 const winget = require('./utils/winget');
 const jobs = require('./utils/jobs');
@@ -11,11 +11,15 @@ const cache = require('./utils/cache');
 const app = express();
 const PORT = 8080;
 
-app.use(cors());
+// --- CORS: Restrict to same-origin only ---
+app.use(
+    cors({
+        origin: [`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`],
+    })
+);
 app.use(express.json());
 
 // --- GLOBAL ERROR HANDLERS ---
-// Prevent server crash on unhandled timeouts/errors (e.g. from fetch)
 process.on('uncaughtException', (err) => {
     console.error('[System] Uncaught Exception:', err);
 });
@@ -24,9 +28,6 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error('[System] Unhandled Rejection:', reason);
 });
 
-// --- HEARTBEAT & AUTO-SHUTDOWN REMOVED ---
-// Server now runs until manually stopped
-
 // Static Files
 app.use(express.static(path.join(__dirname, 'gui')));
 
@@ -34,6 +35,30 @@ app.use(express.static(path.join(__dirname, 'gui')));
 const DOWNLOAD_DIR = path.join(__dirname, 'Downloads');
 if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+}
+
+// --- SECURITY HELPERS ---
+/**
+ * Validates that a resolved path is within the expected base directory.
+ * Prevents path traversal attacks.
+ */
+function isPathSafe(basePath, userPath) {
+    const resolved = path.resolve(basePath, userPath);
+    return resolved.startsWith(basePath + path.sep) || resolved === basePath;
+}
+
+/**
+ * Validates a winget package ID.
+ * Returns true if the ID looks safe.
+ */
+function isValidPackageId(id) {
+    if (!id || typeof id !== 'string') return false;
+    if (id.length < 3 || id.length > 256) return false;
+    // Reject whitespace, shell metacharacters, and path separators
+    if (/[\s%`$|;&<>{}()\[\]!^~"\\\/]/.test(id)) return false;
+    // Must not start with dot or dash
+    if (/^[.\-]/.test(id)) return false;
+    return true;
 }
 
 // --- VERSION ---
@@ -47,7 +72,6 @@ app.get('/api/installed', async (req, res) => {
     if (cached) {
         return res.json({ success: true, apps: cached });
     }
-    // Fallback to refresh
     try {
         const apps = await winget.listInstalled();
         cache.save('installed', apps);
@@ -109,6 +133,29 @@ app.get('/api/ignored', (req, res) => {
     res.json({ success: true, apps: ignored });
 });
 
+app.post('/api/ignore', (req, res) => {
+    const { id, name } = req.body;
+    if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });
+
+    let ignored = cache.load('ignored') || [];
+    if (!ignored.find((i) => i.id === id)) {
+        ignored.push({ id, name });
+        cache.save('ignored', ignored);
+    }
+    res.json({ success: true, message: `Ignored ${id}` });
+});
+
+app.post('/api/unignore', (req, res) => {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });
+
+    let ignored = cache.load('ignored') || [];
+    ignored = ignored.filter((i) => i.id !== id);
+    cache.save('ignored', ignored);
+    res.json({ success: true, message: `Unignored ${id}` });
+});
+
+// --- LEGACY GET support for ignore/unignore (frontend compat) ---
 app.get('/api/ignore', (req, res) => {
     const { id, name } = req.query;
     if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });
@@ -150,7 +197,7 @@ async function scrapeIconFromUrl(targetUrl) {
         const decoder = new TextDecoder();
         let html = '';
         let bytesRead = 0;
-        const LIMIT = 512000; // Increase limit to 512KB for large heads
+        const LIMIT = 512000; // 512KB for large heads
 
         try {
             while (true) {
@@ -162,15 +209,6 @@ async function scrapeIconFromUrl(targetUrl) {
             }
         } catch (e) {}
 
-        try {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                html += decoder.decode(value, { stream: true });
-                bytesRead += value.length;
-                if (bytesRead > LIMIT || html.includes('</head>')) break;
-            }
-        } catch (e) {}
         try {
             reader.cancel();
         } catch (e) {}
@@ -181,19 +219,16 @@ async function scrapeIconFromUrl(targetUrl) {
         };
 
         // Multiple patterns to catch different HTML structures
-        // Pattern 1: apple-touch-icon (any attribute order)
         let iconUrl = findAttr(/<link[^>]*rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i);
         if (!iconUrl)
             iconUrl = findAttr(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']apple-touch-icon["']/i);
 
-        // Pattern 2: icon with sizes
         if (!iconUrl)
             iconUrl = findAttr(
                 /<link[^>]*rel=["']icon["'][^>]*href=["']([^"']+)["'][^>]*sizes=["'](?:192|180|128|96|64|48|32)/i
             );
         if (!iconUrl) iconUrl = findAttr(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']icon["']/i);
 
-        // Pattern 3: shortcut icon
         if (!iconUrl)
             iconUrl = findAttr(
                 /<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']+)["']/i
@@ -203,7 +238,6 @@ async function scrapeIconFromUrl(targetUrl) {
                 /<link[^>]*href=["']([^"']+)["'][^>]*rel=["'](?:shortcut )?icon["']/i
             );
 
-        // Pattern 4: Any link with icon in rel
         if (!iconUrl)
             iconUrl = findAttr(/<link[^>]*rel=["'][^"']*icon[^"']*["'][^>]*href=["']([^"']+)["']/i);
 
@@ -219,14 +253,13 @@ async function scrapeIconFromUrl(targetUrl) {
                 }
             }
 
-            // Validate icon URL - check if it returns an image
+            // Validate icon URL
             try {
                 const iconRes = await fetch(iconUrl, {
                     method: 'HEAD',
                     signal: AbortSignal.timeout(2000),
                 });
                 const contentType = iconRes.headers.get('content-type') || '';
-                // Only accept if it looks like an image
                 if (
                     iconRes.ok &&
                     (contentType.includes('image') ||
@@ -235,14 +268,12 @@ async function scrapeIconFromUrl(targetUrl) {
                     return iconUrl;
                 }
             } catch (e) {}
-            // If validation failed, don't return this URL
         }
 
         // Fallback: Try /favicon.ico at domain root
         try {
             const u = new URL(domain);
             const faviconUrl = u.origin + '/favicon.ico';
-            // Quick HEAD check to see if it exists
             const faviconRes = await fetch(faviconUrl, {
                 method: 'HEAD',
                 signal: AbortSignal.timeout(2000),
@@ -255,8 +286,19 @@ async function scrapeIconFromUrl(targetUrl) {
     return null;
 }
 
-// Cache for manifest lookups
+// Cache for manifest lookups (with size limit)
 const manifestCache = new Map();
+const MANIFEST_CACHE_MAX = 500;
+
+function setManifestCache(id, data) {
+    // Evict oldest entries if over limit
+    if (manifestCache.size >= MANIFEST_CACHE_MAX) {
+        const firstKey = manifestCache.keys().next().value;
+        manifestCache.delete(firstKey);
+    }
+    manifestCache.set(id, data);
+}
+
 // Track active winget processes to kill them on new search
 const activeManifestJobs = new Set();
 
@@ -264,10 +306,7 @@ app.get('/api/manifest', async (req, res) => {
     const { id } = req.query;
     if (!id) return res.json({ success: false });
 
-    // Validate ID format - reject obviously malformed IDs
-    // Valid winget IDs can start with letters or numbers (e.g., 7gxycn08.WinGetCreateGui)
-    if (id.length < 3 || id.includes(' ') || id.includes('%20') || /^\./.test(id)) {
-        // Only reject if starts with dot
+    if (!isValidPackageId(id)) {
         return res.json({ success: false, reason: 'invalid_id' });
     }
 
@@ -275,11 +314,10 @@ app.get('/api/manifest', async (req, res) => {
         return res.json(manifestCache.get(id));
     }
 
-    // Run winget show
-    // Use --accept-source-agreements just in case
-    const cmd = `winget show --id "${id}" --accept-source-agreements --disable-interactivity`;
+    // Run winget show safely using execFile
+    const args = ['show', '--id', id, '--accept-source-agreements', '--disable-interactivity'];
 
-    exec(cmd, { encoding: 'utf8' }, async (err, stdout, stderr) => {
+    execFile('winget', args, { encoding: 'utf8' }, async (err, stdout) => {
         // Guard against sending multiple responses
         let responseSent = false;
         const sendResponse = (data) => {
@@ -291,24 +329,23 @@ app.get('/api/manifest', async (req, res) => {
         };
 
         try {
-            if (err) {
+            if (err && !stdout) {
                 return sendResponse({ success: false });
             }
 
-            // Extract ALL URLs from the output (in order of appearance)
+            // Extract ALL URLs from the output
             const urlRegex = /:\s+(https?:\/\/[^\s]+)/gi;
             const allUrls = [];
             let match;
             while ((match = urlRegex.exec(stdout)) !== null) {
                 const url = match[1];
-                // Clean up trailing characters that might be part of the line
                 const cleanUrl = url.replace(/[,;)>\]]+$/, '');
                 if (!allUrls.includes(cleanUrl)) {
                     allUrls.push(cleanUrl);
                 }
             }
 
-            // Move GitHub URLs to end (they usually have GitHub's favicon, not app's)
+            // Move GitHub URLs to end
             const nonGithubUrls = allUrls.filter(
                 (u) => !u.includes('github.com') && !u.includes('github.io')
             );
@@ -317,10 +354,8 @@ app.get('/api/manifest', async (req, res) => {
             );
             const sortedUrls = [...nonGithubUrls, ...githubUrls];
 
-            // Helper: Get root domain from hostname (remove subdomain)
             const getRootDomain = (hostname) => {
                 const parts = hostname.split('.');
-                // Handle special cases like co.uk, com.au etc.
                 if (parts.length > 2) {
                     return parts.slice(-2).join('.');
                 }
@@ -330,18 +365,16 @@ app.get('/api/manifest', async (req, res) => {
             let domain = null;
             let iconUrl = null;
             let scrapeUrl = null;
-            let bestRootDomain = null; // Track the best root domain for Google fallback
+            let bestRootDomain = null;
 
-            // Try each URL in order (non-GitHub first, then GitHub)
             for (const url of sortedUrls) {
-                if (iconUrl) break; // Already found one
+                if (iconUrl) break;
 
                 try {
                     const u = new URL(url);
                     const hostname = u.hostname;
                     const rootDomain = getRootDomain(hostname);
 
-                    // Track best root domain (prefer non-CDN domains)
                     if (
                         !bestRootDomain ||
                         (!hostname.includes('cdn') && !hostname.includes('download'))
@@ -349,12 +382,10 @@ app.get('/api/manifest', async (req, res) => {
                         bestRootDomain = rootDomain;
                     }
 
-                    // 1. Try full URL first
                     scrapeUrl = url;
                     domain = hostname;
                     iconUrl = await scrapeIconFromUrl(url);
 
-                    // 2. If failed, try just the domain root
                     if (!iconUrl) {
                         const domainRoot = `https://${hostname}`;
                         if (domainRoot !== url) {
@@ -363,7 +394,6 @@ app.get('/api/manifest', async (req, res) => {
                         }
                     }
 
-                    // 3. If still failed and has subdomain, try root domain
                     if (!iconUrl) {
                         if (rootDomain !== hostname) {
                             scrapeUrl = `https://${rootDomain}`;
@@ -374,7 +404,7 @@ app.get('/api/manifest', async (req, res) => {
                 } catch (e) {}
             }
 
-            // 4. FALLBACK: If all scraping failed but we have a root domain, use Google Favicon API
+            // Fallback: Google Favicon API
             if (!iconUrl && bestRootDomain) {
                 iconUrl = `https://www.google.com/s2/favicons?domain=${bestRootDomain}&sz=128`;
                 domain = bestRootDomain;
@@ -382,10 +412,9 @@ app.get('/api/manifest', async (req, res) => {
             }
 
             const result = { success: !!iconUrl, domain, url: scrapeUrl, iconUrl };
-            manifestCache.set(id, result);
+            setManifestCache(id, result);
             sendResponse(result);
         } catch (e) {
-            // Catch any unhandled errors to prevent server crash
             console.error('[Manifest Error]', id, e.message);
             sendResponse({ success: false, error: e.message });
         }
@@ -399,14 +428,27 @@ app.get('/api/details', async (req, res) => {
     const { id } = req.query;
     if (!id) return res.json({ success: false, error: 'No ID provided' });
 
-    // Validate ID - allow IDs starting with numbers (e.g., 7gxycn08.WinGetCreateGui)
-    if (id.length < 3 || id.includes(' ') || /^\./.test(id)) {
+    if (!isValidPackageId(id)) {
         return res.json({ success: false, error: 'Invalid ID' });
     }
 
-    const cmd = `chcp 65001 > nul && winget show --id "${id}" --accept-source-agreements --disable-interactivity`;
+    // Use execFile safely with args array
+    const args = [
+        '/c',
+        'chcp',
+        '65001',
+        '>',
+        'nul',
+        '&&',
+        'winget',
+        'show',
+        '--id',
+        id,
+        '--accept-source-agreements',
+        '--disable-interactivity',
+    ];
 
-    exec(cmd, { encoding: 'utf8', maxBuffer: 5 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile('cmd.exe', args, { encoding: 'utf8', maxBuffer: 5 * 1024 * 1024 }, (err, stdout) => {
         try {
             if (err && !stdout) {
                 return res.json({ success: false, error: 'Package not found' });
@@ -437,7 +479,6 @@ app.get('/api/details', async (req, res) => {
             let collectingDescription = false;
 
             for (const line of lines) {
-                // Detect section headers
                 if (line.startsWith('Found ')) {
                     const match = line.match(/Found (.+?) \[(.+?)\]/);
                     if (match) {
@@ -446,13 +487,11 @@ app.get('/api/details', async (req, res) => {
                     continue;
                 }
 
-                // Key: Value parsing
                 const kvMatch = line.match(/^([A-Za-z\s]+):\s*(.*)$/);
                 if (kvMatch) {
                     const key = kvMatch[1].trim().toLowerCase();
                     const value = kvMatch[2].trim();
 
-                    // End description collection when hitting next key
                     if (collectingDescription && key !== 'description') {
                         details.description = descriptionLines.join(' ').trim();
                         collectingDescription = false;
@@ -504,18 +543,15 @@ app.get('/api/details', async (req, res) => {
                             break;
                     }
                 } else if (line.startsWith('  ') && currentSection === 'tags') {
-                    // Tags are indented
                     const tag = line.trim();
                     if (tag && !tag.includes(':')) {
                         details.tags.push(tag);
                     }
                 } else if (collectingDescription && line.trim()) {
-                    // Multi-line description
                     descriptionLines.push(line.trim());
                 }
             }
 
-            // Final description collection
             if (collectingDescription) {
                 details.description = descriptionLines.join(' ').trim();
             }
@@ -527,6 +563,7 @@ app.get('/api/details', async (req, res) => {
         }
     });
 });
+
 // ==========================================
 // ICON SCRAPER (SERVER SIDE)
 // ==========================================
@@ -534,8 +571,6 @@ app.get('/api/scrape-icon', async (req, res) => {
     const domain = req.query.domain;
     if (!domain) return res.json({ success: false });
 
-    // Use shared scraping logic
-    // Construct simplified URL if only domain is passed
     const targetUrl = domain.startsWith('http') ? domain : `https://${domain}`;
 
     try {
@@ -553,10 +588,8 @@ app.get('/api/scrape-icon', async (req, res) => {
 app.get('/api/search', async (req, res) => {
     const { q } = req.query;
 
-    // START NEW SEARCH: Kill all pending icon fetches from previous searches
-    // This frees up 'winget' to serve the new request's icons faster
+    // Kill pending icon fetches from previous searches
     if (activeManifestJobs.size > 0) {
-        // console.log(`[Search] New search detected. Killing ${activeManifestJobs.size} pending manifest jobs.`);
         for (const child of activeManifestJobs) {
             try {
                 child.kill();
@@ -583,11 +616,11 @@ app.get('/api/cancel', (req, res) => {
     const success = jobs.cancelJob(id);
     res.json({ success });
 });
+
 app.get('/api/install', (req, res) => {
     const { id } = req.query;
     if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });
 
-    // args: install --id <id> ...
     const jobId = jobs.startJob('winget', [
         'install',
         '--id',
@@ -603,11 +636,7 @@ app.get('/api/uninstall', (req, res) => {
     const { id, name } = req.query;
     if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });
 
-    // Use native Windows uninstall via registry (more reliable than winget for some apps)
     const scriptPath = path.join(__dirname, 'utils', 'native-uninstall.ps1');
-
-    // Use the app name directly - it's more reliable than parsing IDs
-    // The name comes from the GUI and is the actual display name
     const searchName = name || id.split('.').pop();
 
     const jobId = jobs.startJob('powershell', [
@@ -648,10 +677,8 @@ app.get('/api/download', (req, res) => {
     const { id, name } = req.query;
     if (!id) return res.status(400).json({ success: false, message: 'No ID provided' });
 
-    // Determine download directory
     let targetDir = DOWNLOAD_DIR;
     if (name) {
-        // Sanitize name for folder
         const safeName = name.replace(/[<>:"/\\|?*]/g, '').trim();
         if (safeName) {
             targetDir = path.join(DOWNLOAD_DIR, safeName);
@@ -691,9 +718,9 @@ app.get('/api/status', (req, res) => {
 });
 
 // --- ICON QUEUE ---
-const iconQueue = []; // { res, args, iconPath }
+const iconQueue = [];
 let activeIconJobs = 0;
-const MAX_CONCURRENT_ICONS = 2; // Keep low to prevent freeze
+const MAX_CONCURRENT_ICONS = 2;
 
 function processIconQueue() {
     if (activeIconJobs >= MAX_CONCURRENT_ICONS || iconQueue.length === 0) return;
@@ -722,13 +749,11 @@ function processIconQueue() {
         const trimmed = data.trim();
         if (code === 0 && trimmed.length > 0) {
             try {
-                // Decode Base64 and Save
                 const buffer = Buffer.from(trimmed, 'base64');
                 fs.writeFileSync(iconPath, buffer);
                 if (!res.headersSent) res.sendFile(iconPath);
             } catch (e) {
                 if (!res.headersSent) {
-                    // Return generic transparent pixel with missing header
                     const empty = Buffer.from(
                         'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                         'base64'
@@ -738,13 +763,12 @@ function processIconQueue() {
                 }
             }
         } else {
-            // Negative Cache: write a placeholder
+            // Negative Cache
             try {
                 fs.writeFileSync(iconPath + '.404', '');
             } catch (e) {}
 
             if (!res.headersSent) {
-                // Return generic transparent pixel with missing header
                 const empty = Buffer.from(
                     'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                     'base64'
@@ -761,8 +785,6 @@ function processIconQueue() {
     ps.on('error', (err) => {
         clearTimeout(timeout);
         console.error('Spawn error:', err);
-        // Also negative cache on spawn errors? Maybe temporary?
-        // Let's assume spawn errors might be transient or system load, but for now we won't cache them.
         if (!res.headersSent) {
             const empty = Buffer.from(
                 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
@@ -778,19 +800,10 @@ function processIconQueue() {
 
 // --- ICONS (LOCAL) ---
 app.get('/api/icon', async (req, res) => {
-    const { id, name, file } = req.query; // 'file' is the relative path from Downloads
-
-    try {
-        fs.appendFileSync(
-            path.join(__dirname, 'server_debug.log'),
-            `REQ: ${JSON.stringify(req.query)}\n`
-        );
-    } catch (e) {}
+    const { id, name, file } = req.query;
 
     if (!name && !file && !id) return res.status(400).send('No identifier provided');
 
-    // Cache Key: ID > Name > File
-    // Sanitize key for filesystem
     const rawKey = id || name || file;
     const cacheKey = rawKey.replace(/[^a-zA-Z0-9.-]/g, '_');
     const iconPath = path.join(__dirname, 'data', 'icons', `${cacheKey}.png`);
@@ -818,29 +831,24 @@ app.get('/api/icon', async (req, res) => {
     let args = ['-ExecutionPolicy', 'Bypass', '-File', scriptPath];
 
     if (file) {
-        // Handle Downloaded File
-        // Construct absolute path using DOWNLOAD_DIR
+        // Validate path safety
+        if (!isPathSafe(DOWNLOAD_DIR, file)) {
+            return res.status(400).send('Invalid file path');
+        }
         const absPath = path.join(DOWNLOAD_DIR, file);
         args.push('-Path', absPath);
     } else {
-        // Handle Installed App - pass both name and ID for better matching
         args.push('-AppName', name);
         if (id) {
-            // Parse MSIX IDs to extract clean package name
-            // Format: MSIX\Microsoft.AV1VideoExtension_2.0.6.0_x64__8wekyb3d8bbwe
-            // Extract: Microsoft.AV1VideoExtension
             let cleanId = id;
             if (id.startsWith('MSIX\\') || id.startsWith('MSIX/')) {
-                cleanId = id.substring(5); // Remove "MSIX\"
+                cleanId = id.substring(5);
             }
-            // Remove version and architecture suffix (everything after first underscore)
             if (cleanId.includes('_')) {
                 cleanId = cleanId.split('_')[0];
             }
-            // Also handle ARP format: ARP\Machine\X86\LTRM_15_0_1
             if (id.startsWith('ARP\\') || id.startsWith('ARP/')) {
-                // For ARP, use just the last part as a hint
-                const parts = id.split(/[\\\/]/);
+                const parts = id.split(/[\\/]/);
                 cleanId = parts[parts.length - 1];
             }
             args.push('-AppId', cleanId);
@@ -858,7 +866,6 @@ function getFilesRecursive(dir, baseDir = dir) {
     try {
         const list = fs.readdirSync(dir);
         list.forEach((file) => {
-            // Skip "Dependencies" folder
             if (file.toLowerCase() === 'dependencies') return;
 
             const fullPath = path.join(dir, file);
@@ -871,7 +878,6 @@ function getFilesRecursive(dir, baseDir = dir) {
                         results.push({
                             Name: path.relative(baseDir, fullPath),
                             Length: stat.size,
-                            // Ensure valid ISO string
                             LastWriteTime: stat.mtime
                                 ? stat.mtime.toISOString()
                                 : new Date().toISOString(),
@@ -898,16 +904,16 @@ app.get('/api/downloaded/delete', (req, res) => {
     const { file } = req.query;
     if (!file) return res.status(400).json({ success: false, message: 'No file' });
 
-    // Check if file is in a subfolder (e.g. "AppName/file.exe")
+    // Security: validate path is within DOWNLOAD_DIR
+    if (!isPathSafe(DOWNLOAD_DIR, file)) {
+        return res.status(400).json({ success: false, message: 'Invalid path' });
+    }
+
     const parts = file.split(path.sep);
     const isSubfolder = parts.length > 1;
 
     try {
         if (isSubfolder) {
-            // Delete the parent folder (e.g. "Downloads/AppName")
-            // Security check: ensure no '..' to escape downloads
-            if (file.includes('..')) throw new Error('Invalid path');
-
             const folderName = parts[0];
             const folderPath = path.join(DOWNLOAD_DIR, folderName);
 
@@ -915,14 +921,12 @@ app.get('/api/downloaded/delete', (req, res) => {
                 fs.rmSync(folderPath, { recursive: true, force: true });
             }
         } else {
-            // Just delete the file
             const filePath = path.join(DOWNLOAD_DIR, file);
             if (fs.existsSync(filePath)) {
                 fs.unlinkSync(filePath);
             }
         }
 
-        // Refresh cache
         const files = getFilesRecursive(DOWNLOAD_DIR);
         cache.save('downloads', files);
 
@@ -936,15 +940,18 @@ app.get('/api/downloaded/run', (req, res) => {
     const { file } = req.query;
     if (!file) return res.status(400).json({ success: false, message: 'No file' });
 
+    // Security: validate path is within DOWNLOAD_DIR
+    if (!isPathSafe(DOWNLOAD_DIR, file)) {
+        return res.status(400).json({ success: false, message: 'Invalid path' });
+    }
+
     const filePath = path.join(DOWNLOAD_DIR, file);
     if (fs.existsSync(filePath)) {
-        // Use PowerShell Start-Process to handle MSIX, UAC, etc. nicely
-        // and wrap it in a job to provide feedback
         const jobId = jobs.startJob('powershell', [
             '-Command',
             'Start-Process',
             '-FilePath',
-            `'${filePath}'`,
+            `'${filePath.replace(/'/g, "''")}'`,
             '-PassThru',
         ]);
         res.json({ success: true, jobId, message: `Launching ${file}` });
@@ -958,25 +965,24 @@ app.get('/api/downloaded/open-folder', (req, res) => {
     const { file } = req.query;
     if (!file) return res.status(400).json({ success: false, message: 'No file' });
 
-    // Security check
-    if (file.includes('..')) {
+    // Security: validate path is within DOWNLOAD_DIR
+    if (!isPathSafe(DOWNLOAD_DIR, file)) {
         return res.status(400).json({ success: false, message: 'Invalid path' });
     }
 
     const filePath = path.join(DOWNLOAD_DIR, file);
 
     if (fs.existsSync(filePath)) {
-        // Open Explorer and select the file - use start command to bring to foreground
-        exec(`start explorer.exe /select,"${filePath}"`);
+        // Use spawn with args array to avoid command injection
+        spawn('explorer.exe', ['/select,', filePath], { detached: true, stdio: 'ignore' });
         res.json({ success: true });
     } else {
         // Just open the download directory
-        exec(`start explorer.exe "${DOWNLOAD_DIR}"`);
+        spawn('explorer.exe', [DOWNLOAD_DIR], { detached: true, stdio: 'ignore' });
         res.json({ success: true });
     }
 });
 
-// Start Server
 // Start Server
 app.listen(PORT, '127.0.0.1', () => {
     console.log(`EasyWinGet Node Server running at http://127.0.0.1:${PORT}`);

@@ -12,7 +12,7 @@ param(
     [string]$Path
 )
 
-$LogFile = "C:\bots\EasyWinGet\debug_icon.log"
+$LogFile = Join-Path $PSScriptRoot "..\debug_icon.log"
 function Write-Log {
     param($Message)
     $ts = Get-Date -Format "HH:mm:ss"

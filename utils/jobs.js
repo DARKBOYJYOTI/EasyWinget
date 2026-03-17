@@ -6,21 +6,20 @@ const crypto = require('crypto'); // Native node module
 const JOBS_DIR = path.join(__dirname, '../jobs');
 const activeJobs = new Map();
 
+// Auto-cleanup interval (clean completed jobs after 10 minutes)
+const JOB_RETENTION_MS = 10 * 60 * 1000;
+
 // Ensure jobs dir exists
 if (!fs.existsSync(JOBS_DIR)) {
     fs.mkdirSync(JOBS_DIR, { recursive: true });
 }
 
-// Regex to strip ANSI (CSI & OSC) - centralized here or just let it write raw?
-// The user LIKED the strip fix in WingetPty.js.
-// So we should replicate that stripping logic here before writing to file.
+// Regex to strip ANSI (CSI & OSC)
 const stripAnsi = (str) => {
-    // Regex to strip ANSI (CSI & OSC)
     let clean = str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[a-zA-Z]/g, '');
     clean = clean.replace(/[\u001b\u009b]][^\u0007\u001b]*[\u0007\u001b\\]/g, '');
 
     // Handle Backspace (\x08) simulation
-    // "abc\b" -> "ab"
     while (clean.includes('\x08')) {
         clean = clean.replace(/[^\x08]\x08/, ''); // Remove char + backspace
         clean = clean.replace(/^\x08+/, ''); // Remove leading backspaces (safeguard)
@@ -32,6 +31,34 @@ function createJobId() {
     return 'job-' + crypto.randomUUID();
 }
 
+/**
+ * Auto-cleanup completed jobs after retention period.
+ * Runs every 2 minutes.
+ */
+function scheduleCleanup() {
+    setInterval(
+        () => {
+            const now = Date.now();
+            for (const [jobId, job] of activeJobs.entries()) {
+                if (job.done && job.completedAt && now - job.completedAt > JOB_RETENTION_MS) {
+                    console.log(`[Job Manager] Auto-cleaning job ${jobId}`);
+                    // Delete log file
+                    try {
+                        if (fs.existsSync(job.logFile)) {
+                            fs.unlinkSync(job.logFile);
+                        }
+                    } catch (e) {}
+                    activeJobs.delete(jobId);
+                }
+            }
+        },
+        2 * 60 * 1000
+    );
+}
+
+// Start the cleanup scheduler
+scheduleCleanup();
+
 module.exports = {
     startJob: (command, args) => {
         const jobId = createJobId();
@@ -42,7 +69,7 @@ module.exports = {
         // Detect if this is a PowerShell command
         const isPowerShell = command.toLowerCase().includes('powershell');
 
-        // Always use PowerShell to ensure consistent argument handling and avoid cmd.exe quoting issues
+        // Always use PowerShell to ensure consistent argument handling
         const psPath = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 
         let ptyProcess;
@@ -60,8 +87,6 @@ module.exports = {
             // General commands (winget, etc.) wrapped in PowerShell
             // Escape arguments for PowerShell (single quotes for literals)
             const psArgs = args.map((a) => {
-                // If it already has quotes, leave it? Or assume we need to wrap?
-                // Safest for paths with spaces is wrapping in single quotes
                 if (a.includes(' ') || a.includes('(') || a.includes(')')) return `'${a}'`;
                 return a;
             });
@@ -84,17 +109,10 @@ module.exports = {
             let clean = stripAnsi(data);
 
             // Aggressively remove spinner artifacts
-            // 1. Remove sequences of spinner chars surrounding CRs
-            clean = clean.replace(/(\r[\-\\\|\/]+)|([\-\\\|\/]+\r)/g, '');
-
-            // 2. Remove spinner chars at start of lines if they look like artifacts
-            clean = clean.replace(/^[\-\\\|\/]\r/gm, '');
-
-            // 3. Clean up standalone backslashes often left over
+            clean = clean.replace(/(\r[-\\|\/]+)|([-\\|\/]+\r)/g, '');
+            clean = clean.replace(/^[-\\|\/]\r/gm, '');
             clean = clean.replace(/^\s*\\\s*$/gm, '');
-
-            // 4. Clean up standalone spinner chars on their own lines (e.g. "$ -")
-            clean = clean.replace(/^\s*[\-\\\|\/]\s*$/gm, '');
+            clean = clean.replace(/^\s*[-\\|\/]\s*$/gm, '');
 
             if (clean.length > 0) {
                 logStream.write(clean);
@@ -108,6 +126,7 @@ module.exports = {
             startTime: new Date(),
             done: false,
             exitCode: null,
+            completedAt: null,
         };
 
         activeJobs.set(jobId, jobData);
@@ -116,9 +135,8 @@ module.exports = {
             console.log(`[Job Manager] Job ${jobId} exited with code ${res.exitCode}`);
             jobData.done = true;
             jobData.exitCode = res.exitCode;
+            jobData.completedAt = Date.now();
             logStream.end();
-            // Keep in memory for a bit so UI can query final status?
-            // Yes, user might query /api/status?id=... after it finishes.
         });
 
         return jobId;
@@ -144,6 +162,14 @@ module.exports = {
     },
 
     cleanupJob: (jobId) => {
+        const job = activeJobs.get(jobId);
+        if (job) {
+            try {
+                if (fs.existsSync(job.logFile)) {
+                    fs.unlinkSync(job.logFile);
+                }
+            } catch (e) {}
+        }
         activeJobs.delete(jobId);
     },
 
@@ -154,6 +180,7 @@ module.exports = {
             try {
                 job.process.kill();
                 job.done = true;
+                job.completedAt = Date.now();
                 return true;
             } catch (e) {
                 console.error(`[Job Manager] Error killing job ${jobId}:`, e);

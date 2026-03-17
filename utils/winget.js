@@ -1,8 +1,5 @@
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 
-/**
- * Strips ANSI codes and splits into lines
- */
 /**
  * Strips ANSI codes and splits into lines
  */
@@ -12,8 +9,8 @@ function cleanOutput(raw) {
     clean = clean.replace(/[\u001b\u009b]][^\u0007\u001b]*[\u0007\u001b\\]/g, '');
 
     // Aggressively remove spinner artifacts (from jobs.js findings)
-    clean = clean.replace(/(\r[\-\\\|\/]+)|([\-\\\|\/]+\r)/g, '');
-    clean = clean.replace(/^[\-\\\|\/]\r/gm, '');
+    clean = clean.replace(/(\r[-\\|\/]+)|([-\\|\/]+\r)/g, '');
+    clean = clean.replace(/^[-\\|\/]\r/gm, '');
 
     // Split lines
     return clean
@@ -54,14 +51,6 @@ function parseApps(output) {
 
         if (colVersion > -1 && line.length > colVersion) {
             id = line.substring(colId, colVersion).trim();
-            // Version is from colVersion to end (or next column like Match/Source)
-            // But we can usually take the rest or split by space for the first token?
-            // "Version" column often has just the version.
-            // But search has "Match" and "Source" after.
-            // Let's take the version as the next block of non-space text after colVersion?
-            // Or better: find the next gap?
-            // Actually, for search, Version is followed by Match/Source.
-            // Let's assume Version is space-delimited if we don't have colMatch.
             const rest = line.substring(colVersion).trim();
             version = rest.split(/\s+/)[0];
         } else {
@@ -119,7 +108,6 @@ function parseUpdates(output) {
 
             if (colAvailable > -1 && line.length > colAvailable) {
                 current = line.substring(colVersion, colAvailable).trim();
-                // Available is remainder, maybe followed by Source? Usually empty for upgrade list
                 available = line.substring(colAvailable).split(/\s+/)[0];
             } else {
                 current = line.substring(colVersion).trim();
@@ -139,36 +127,45 @@ function parseUpdates(output) {
 }
 
 /**
- * Executes a winget command (synchronous-like, returns Promise)
+ * Executes a winget command safely using execFile with array args.
+ * Returns a Promise resolving to stdout.
  */
 function invoke(args) {
     return new Promise((resolve, reject) => {
-        // Ensure UTF-8 execution
-        const cmd = `chcp 65001 > nul && winget ${args}`;
-        exec(cmd, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
-            // Winget often returns non-zero codes even for partial successes (like "no updates found")
-            // So we generally resolve stdout unless it's a catastrophic failure
-            if (err && !stdout) {
-                return reject(err);
+        // Use cmd.exe to run chcp first for UTF-8, then winget
+        // We pass args as array to avoid shell injection
+        const cmdArgs = ['/c', 'chcp', '65001', '>', 'nul', '&&', 'winget', ...args];
+        execFile(
+            'cmd.exe',
+            cmdArgs,
+            { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 },
+            (err, stdout) => {
+                // Winget often returns non-zero codes even for partial successes
+                if (err && !stdout) {
+                    return reject(err);
+                }
+                resolve(stdout || '');
             }
-            resolve(stdout || '');
-        });
+        );
     });
 }
 
 module.exports = {
     search: async (query) => {
-        const out = await invoke(`search "${query}" -s winget --accept-source-agreements`);
+        const out = await invoke(['search', query, '-s', 'winget', '--accept-source-agreements']);
         return parseApps(out);
     },
     listInstalled: async () => {
-        const out = await invoke(`list --accept-source-agreements`);
+        const out = await invoke(['list', '--accept-source-agreements']);
         return parseApps(out);
     },
     listUpdates: async () => {
-        const out = await invoke(`upgrade --include-unknown --accept-source-agreements`);
+        const out = await invoke(['upgrade', '--include-unknown', '--accept-source-agreements']);
         return parseUpdates(out);
     },
+    // Export parsers for testing
+    parseApps,
+    parseUpdates,
     // Raw invoke for debug/custom
     invoke,
 };
