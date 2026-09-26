@@ -12,7 +12,8 @@
     Check, 
     HardDrive, 
     Power,
-    Palette
+    Palette,
+    Bell
   } from '@lucide/svelte';
   import { 
     ClearCache, 
@@ -24,7 +25,8 @@
     GetAutoStart,
     SetAutoStart,
     GetSetting,
-    SetSetting
+    SetSetting,
+    ApplyAutoUpdateSettings
   } from '../../wailsjs/go/main/App.js';
 
   export let version = '4.0.0';
@@ -42,6 +44,8 @@
   let isClearing = false;
   let autoStartEnabled = true;
   let minimizeToTrayEnabled = true;
+  let autoUpdateCheckEnabled = true;
+  let updateCheckInterval = '1440';
   let windowsAccent = '#0078d4';
 
   onMount(async () => {
@@ -65,6 +69,12 @@
       // 2. Minimize to tray: default to enabled
       const trayVal = await GetSetting('easywinget_minimize_to_tray', 'true');
       minimizeToTrayEnabled = trayVal !== 'false';
+
+      // 3. Automated background update check & notification interval
+      const autoCheckVal = await GetSetting('easywinget_auto_update_check', 'true');
+      autoUpdateCheckEnabled = autoCheckVal !== 'false';
+      const intervalVal = await GetSetting('easywinget_update_check_interval', '1440');
+      updateCheckInterval = intervalVal || '1440';
     } catch (err) {
       console.error('Error loading system settings:', err);
     }
@@ -125,6 +135,43 @@
       }
     } catch (err) {
       minimizeToTrayEnabled = !checked;
+      onShowToast('error', 'Settings Error', String(err));
+    }
+  }
+
+  async function handleAutoUpdateToggle(e) {
+    const checked = e.target.checked;
+    autoUpdateCheckEnabled = checked;
+    try {
+      await SetSetting('easywinget_auto_update_check', checked ? 'true' : 'false');
+      await ApplyAutoUpdateSettings();
+      if (checked) {
+        onShowToast('success', 'Update Checks Enabled', 'EasyWinGet will periodically scan for software updates in the background');
+      } else {
+        onShowToast('info', 'Update Checks Disabled', 'Automatic background update checking paused');
+      }
+    } catch (err) {
+      autoUpdateCheckEnabled = !checked;
+      onShowToast('error', 'Settings Error', String(err));
+    }
+  }
+
+  async function handleIntervalChange(e) {
+    const val = e.target.value;
+    updateCheckInterval = val;
+    try {
+      await SetSetting('easywinget_update_check_interval', val);
+      await ApplyAutoUpdateSettings();
+      const labels = {
+        '3': '3 Minutes (Testing)',
+        '60': '1 Hour',
+        '180': '3 Hours',
+        '360': '6 Hours',
+        '720': '12 Hours',
+        '1440': '24 Hours (Daily)'
+      };
+      onShowToast('success', 'Check Interval Updated', `Updates will be checked every ${labels[val] || val + ' minutes'}`);
+    } catch (err) {
       onShowToast('error', 'Settings Error', String(err));
     }
   }
@@ -332,6 +379,57 @@
             <span class="toggle-slider"></span>
           </label>
         </div>
+      </div>
+
+      <!-- Automated Update Checks & Interactive Notifications -->
+      <div class="settings-card">
+        <div class="card-title-row">
+          <div class="card-icon">
+            <Bell size={18} color="currentColor" />
+          </div>
+          <div class="card-heading">
+            <h3>Automated Updates & Notifications</h3>
+            <p>Periodically scan for outdated applications and receive interactive Windows notifications</p>
+          </div>
+        </div>
+
+        <div class="setting-item-row">
+          <div class="item-text">
+            <div class="item-title">Periodic Background Update Checks</div>
+            <div class="item-desc">When an internet connection is available, scans WinGet for app upgrades and sends an interactive notification</div>
+          </div>
+          <label class="toggle-switch">
+            <input 
+              type="checkbox" 
+              checked={autoUpdateCheckEnabled} 
+              on:change={handleAutoUpdateToggle}
+            />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        {#if autoUpdateCheckEnabled}
+          <div class="setting-item-row">
+            <div class="item-text">
+              <div class="item-title">Update Check Frequency</div>
+              <div class="item-desc">Frequency of automated update scans in the background</div>
+            </div>
+            <div class="select-wrapper">
+              <select 
+                class="fluent-select" 
+                value={updateCheckInterval} 
+                on:change={handleIntervalChange}
+              >
+                <option value="3">3 Minutes (Fast Testing)</option>
+                <option value="60">Every 1 Hour</option>
+                <option value="180">Every 3 Hours</option>
+                <option value="360">Every 6 Hours</option>
+                <option value="720">Every 12 Hours</option>
+                <option value="1440">Every 24 Hours (Once Daily - Default)</option>
+              </select>
+            </div>
+          </div>
+        {/if}
       </div>
 
       <!-- 3. SQLite Data & Cache Management -->
@@ -731,6 +829,47 @@
 
   .default-dot {
     background-color: #0078d4;
+  }
+
+  /* Fluent Select Dropdown */
+  .select-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .fluent-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-sm);
+    padding: 7px 34px 7px 12px;
+    font-size: 0.84rem;
+    font-family: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: all var(--transition-fast);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+
+  .fluent-select:hover {
+    border-color: var(--accent-light, #60a5fa);
+    background-color: var(--bg-card-hover);
+  }
+
+  .fluent-select:focus {
+    border-color: var(--accent-primary, #0078d4);
+    box-shadow: 0 0 0 2px var(--accent-badge-bg, rgba(0, 120, 212, 0.25));
+  }
+
+  .fluent-select option {
+    background: var(--bg-card);
+    color: var(--text-primary);
   }
 </style>
 

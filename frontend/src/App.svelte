@@ -22,7 +22,8 @@
     GetDownloadedFiles,
     GetSetting,
     SetSetting,
-    GetWindowsTransparencyEnabled
+    GetWindowsTransparencyEnabled,
+    GetInitialTab
   } from '../wailsjs/go/main/App.js';
   import { EventsOn } from '../wailsjs/runtime/runtime.js';
   import { Terminal, X } from '@lucide/svelte';
@@ -187,12 +188,43 @@
       console.warn('Initial counts fetch:', e);
     }
 
+    // Check if app was launched with a specific tab request (e.g. protocol activation easywinget://updates)
+    try {
+      const initTab = await GetInitialTab();
+      if (initTab) {
+        activeTab = initTab;
+      }
+    } catch (e) {}
+
+    // Global Window Hidden & Zero CPU Suspension Sync
+    const updateWindowHiddenState = () => {
+      const isHidden = Boolean(document.hidden || document.visibilityState === 'hidden');
+      if (typeof document !== 'undefined') {
+        document.documentElement.dataset.windowHidden = isHidden ? 'true' : 'false';
+      }
+    };
+    updateWindowHiddenState();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', updateWindowHiddenState);
+      window.addEventListener('focus', updateWindowHiddenState);
+      window.addEventListener('blur', () => { setTimeout(updateWindowHiddenState, 80); });
+      window.addEventListener('easywinget:window-hidden', updateWindowHiddenState);
+      window.addEventListener('easywinget:window-shown', updateWindowHiddenState);
+    }
+
     // 6. Global Wails Events
     try {
+      // Direct navigation to tab event (e.g. from protocol activation or Windows Toast click)
+      EventsOn('navigate:tab', (tab) => {
+        if (tab && typeof tab === 'string') {
+          activeTab = tab;
+        }
+      });
+
       // Backend toast notification (e.g. from background update check)
       EventsOn('toast:notify', (data) => {
         if (data) {
-          showToast(data.type || 'info', data.title, data.message);
+          showToast(data.type || 'info', data.title, data.message, data.actionTab);
         }
       });
 
@@ -254,19 +286,19 @@
 
   let toastTimer = null;
 
-  function showToast(type, title, message) {
+  function showToast(type, title, message = '', actionTab = null) {
     if (toastTimer) {
       clearTimeout(toastTimer);
       toastTimer = null;
     }
     const id = Date.now() + Math.random();
     // Only one toast at a time: override any currently active toast
-    toasts = [{ id, type, title, message }];
+    toasts = [{ id, type, title, message, actionTab }];
 
     toastTimer = setTimeout(() => {
       toasts = [];
       toastTimer = null;
-    }, 3200);
+    }, 4200);
   }
 
   function removeToast(id) {
@@ -418,7 +450,15 @@
   />
 
   <!-- Toast Container with Sound Synthesizer -->
-  <Toast {toasts} {removeToast} />
+  <Toast 
+    {toasts} 
+    {removeToast} 
+    onToastClick={(t) => {
+      if (t && t.actionTab) {
+        activeTab = t.actionTab;
+      }
+    }}
+  />
 </div>
 
 <style>

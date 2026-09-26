@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"embed"
 	"os"
+	"strings"
 
 	"easywinget/backend/system"
 
@@ -28,15 +29,21 @@ var appIconPng []byte
 
 func main() {
 	startHidden := false
+	initialTab := ""
 	for _, arg := range os.Args[1:] {
-		if arg == "-silent" || arg == "--silent" {
+		low := strings.ToLower(arg)
+		if low == "-silent" || low == "--silent" {
 			startHidden = true
-			break
+		} else if strings.Contains(low, "updates") {
+			initialTab = "updates"
 		}
 	}
 
 	// Create an instance of the app structure
 	app := NewApp()
+	if initialTab != "" {
+		app.SetInitialTab(initialTab)
+	}
 
 	// Create application with options
 	err := wails.Run(&options.App{
@@ -62,6 +69,12 @@ func main() {
 			UniqueId: "easywinget-windows-native-single-instance-lock-guid",
 			OnSecondInstanceLaunch: func(secondInstanceData options.SecondInstanceData) {
 				app.RestoreWindow()
+				for _, arg := range secondInstanceData.Args {
+					if strings.Contains(strings.ToLower(arg), "updates") {
+						app.NavigateToTab("updates")
+						break
+					}
+				}
 			},
 		},
 		OnShutdown: func(ctx context.Context) {

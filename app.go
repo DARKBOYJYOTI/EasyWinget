@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,13 +22,15 @@ import (
 
 // App struct represents the core Wails application
 type App struct {
-	ctx         context.Context
-	dbStorage   *db.Storage
-	jobManager  *jobs.Manager
-	iconManager *icons.Manager
-	downManager *downloads.Manager
-	dataDir     string
-	version     string
+	ctx               context.Context
+	dbStorage         *db.Storage
+	jobManager        *jobs.Manager
+	iconManager       *icons.Manager
+	downManager       *downloads.Manager
+	dataDir           string
+	version           string
+	initialTab        string
+	updateTriggerChan chan struct{}
 }
 
 // NewApp creates a new App application struct
@@ -52,12 +55,39 @@ func NewApp() *App {
 	dm, _ := downloads.NewManager(downloadDir)
 
 	return &App{
-		dbStorage:   storage,
-		jobManager:  jm,
-		iconManager: im,
-		downManager: dm,
-		dataDir:     dataDir,
-		version:     "4.0.0",
+		dbStorage:         storage,
+		jobManager:        jm,
+		iconManager:       im,
+		downManager:       dm,
+		dataDir:           dataDir,
+		version:           "4.0.0",
+		initialTab:        "",
+		updateTriggerChan: make(chan struct{}, 1),
+	}
+}
+
+// SetInitialTab sets the tab to open on startup (e.g. from protocol activation)
+func (a *App) SetInitialTab(tab string) {
+	a.initialTab = tab
+}
+
+// GetInitialTab returns the initial tab if set, e.g. "updates"
+func (a *App) GetInitialTab() string {
+	return a.initialTab
+}
+
+// NavigateToTab emits an event to change active tab in frontend
+func (a *App) NavigateToTab(tab string) {
+	if a.ctx != nil {
+		wailsRuntime.EventsEmit(a.ctx, "navigate:tab", tab)
+	}
+}
+
+// ApplyAutoUpdateSettings signals the background update checker to restart its timer with new interval/state
+func (a *App) ApplyAutoUpdateSettings() {
+	select {
+	case a.updateTriggerChan <- struct{}{}:
+	default:
 	}
 }
 
@@ -68,15 +98,19 @@ func (a *App) startup(ctx context.Context) {
 		a.jobManager.SetContext(ctx)
 	}
 
-	// Default startup settings: both autostart and minimize to tray default to enabled on first launch
+	// Register easywinget:// URL protocol handler in HKCU
+	go system.RegisterProtocolHandler()
+
+	// Default startup settings: autostart, minimize to tray, and auto update check default to enabled
 	if a.GetSetting("easywinget_autostart_init", "") == "" {
 		_ = system.SetAutoStart(true)
 		_ = a.SetSetting("easywinget_autostart_init", "done")
 		_ = a.SetSetting("easywinget_minimize_to_tray", "true")
+		_ = a.SetSetting("easywinget_auto_update_check", "true")
+		_ = a.SetSetting("easywinget_update_check_interval", "1440") // 24 hours daily default
 	}
 
 	// Realtime listener: when any winget job finishes, sync SQLite and notify frontend
-
 	wailsRuntime.EventsOn(ctx, "job:done", func(optionalData ...interface{}) {
 		go func() {
 			time.Sleep(1 * time.Second)
@@ -84,8 +118,19 @@ func (a *App) startup(ctx context.Context) {
 		}()
 	})
 
-	// Startup Internet & Update Checker (runs in background)
+	// If initial tab was requested (e.g. from protocol link), navigate after frontend mounts
+	if a.initialTab != "" {
+		go func() {
+			time.Sleep(800 * time.Millisecond)
+			a.NavigateToTab(a.initialTab)
+		}()
+	}
+
+	// Startup Internet & Update Checker (runs once on startup)
 	go a.startNetworkAndStartupUpdateChecker()
+
+	// Periodic Background Update Checker (runs according to user settings)
+	go a.startPeriodicUpdateChecker()
 }
 
 // RestoreWindow brings the existing EasyWinGet window to foreground and unminimizes it
@@ -99,8 +144,7 @@ func (a *App) RestoreWindow() {
 	wailsRuntime.WindowSetAlwaysOnTop(a.ctx, false)
 }
 
-// startNetworkAndStartupUpdateChecker waits for internet connection and checks for updates
-
+// startNetworkAndStartupUpdateChecker waits for internet connection and checks for updates on startup
 func (a *App) startNetworkAndStartupUpdateChecker() {
 	// Wait a moment for UI to mount
 	time.Sleep(2 * time.Second)
@@ -138,14 +182,80 @@ func (a *App) startNetworkAndStartupUpdateChecker() {
 	if len(updates) > 0 {
 		title := "EasyWinGet Updates"
 		msg := fmt.Sprintf("%d software update(s) are available for your system.", len(updates))
-		system.ShowWindowsNotification(title, msg)
+		system.ShowWindowsNotificationWithAction(title, msg, "easywinget://updates", "View Updates")
 
 		if a.ctx != nil {
 			wailsRuntime.EventsEmit(a.ctx, "toast:notify", map[string]string{
-				"type":    "info",
-				"title":   title,
-				"message": msg,
+				"type":      "info",
+				"title":     title,
+				"message":   msg,
+				"actionTab": "updates",
 			})
+		}
+	}
+}
+
+// startPeriodicUpdateChecker checks for updates at user-configured intervals when internet is active
+func (a *App) startPeriodicUpdateChecker() {
+	// Initial wait to let the startup scan complete cleanly
+	time.Sleep(25 * time.Second)
+
+	for {
+		enabled := a.GetSetting("easywinget_auto_update_check", "true") != "false"
+		intervalStr := a.GetSetting("easywinget_update_check_interval", "1440")
+		intervalMins, err := strconv.Atoi(intervalStr)
+		if err != nil || intervalMins <= 0 {
+			intervalMins = 1440 // default 24 hours
+		}
+
+		duration := time.Duration(intervalMins) * time.Minute
+		timer := time.NewTimer(duration)
+
+		select {
+		case <-timer.C:
+			if !enabled {
+				continue
+			}
+			// Only check if internet is active
+			if !system.CheckInternetConnection() {
+				continue
+			}
+
+			updates, err := winget.ListUpdates()
+			if err != nil {
+				continue
+			}
+
+			if a.dbStorage != nil {
+				_ = a.dbStorage.SaveAvailableUpdates(updates)
+			}
+			if a.ctx != nil {
+				wailsRuntime.EventsEmit(a.ctx, "updates:updated", updates)
+			}
+
+			if len(updates) > 0 {
+				title := "EasyWinGet Updates"
+				msg := fmt.Sprintf("%d software update(s) are available for your system.", len(updates))
+				system.ShowWindowsNotificationWithAction(title, msg, "easywinget://updates", "View Updates")
+
+				if a.ctx != nil {
+					wailsRuntime.EventsEmit(a.ctx, "toast:notify", map[string]string{
+						"type":      "info",
+						"title":     title,
+						"message":   msg,
+						"actionTab": "updates",
+					})
+				}
+			}
+
+		case <-a.updateTriggerChan:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			// Settings changed: loop re-runs immediately with updated interval/enablement
 		}
 	}
 }

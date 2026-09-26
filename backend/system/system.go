@@ -169,14 +169,51 @@ $sc.Save()
 	}()
 }
 
-// ShowWindowsNotification displays a native Windows system notification with app icon
+// RegisterProtocolHandler registers the easywinget:// URL protocol in Windows Registry (HKCU)
+func RegisterProtocolHandler() {
+	exePath, err := os.Executable()
+	if err != nil {
+		return
+	}
+
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\easywinget`, registry.ALL_ACCESS)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+
+	_ = k.SetStringValue("", "URL:EasyWinGet Protocol")
+	_ = k.SetStringValue("URL Protocol", "")
+
+	cmdKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\easywinget\shell\open\command`, registry.ALL_ACCESS)
+	if err != nil {
+		return
+	}
+	defer cmdKey.Close()
+
+	_ = cmdKey.SetStringValue("", fmt.Sprintf(`"%s" "%%1"`, exePath))
+}
+
+// ShowWindowsNotification displays a native Windows system notification with app icon and protocol activation
 func ShowWindowsNotification(title, message string) {
+	ShowWindowsNotificationWithAction(title, message, "easywinget://updates", "View Updates")
+}
+
+// ShowWindowsNotificationWithAction displays a Windows notification with click-to-activate protocol & action button
+func ShowWindowsNotificationWithAction(title, message, launchUri, actionTitle string) {
 	iconSrc := cachedIconPath
 	if iconSrc == "" {
 		appData := os.Getenv("LOCALAPPDATA")
 		if appData != "" {
 			iconSrc = filepath.Join(appData, "EasyWinGet", "appicon.png")
 		}
+	}
+
+	if launchUri == "" {
+		launchUri = "easywinget://updates"
+	}
+	if actionTitle == "" {
+		actionTitle = "View Updates"
 	}
 
 	var script string
@@ -186,7 +223,7 @@ func ShowWindowsNotification(title, message string) {
 [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
 
 $xml = @"
-<toast>
+<toast activationType="protocol" launch="%s">
   <visual>
     <binding template="ToastGeneric">
       <text>%s</text>
@@ -194,6 +231,9 @@ $xml = @"
       <image placement="appLogoOverride" hint-crop="circle" src="%s"/>
     </binding>
   </visual>
+  <actions>
+    <action content="%s" activationType="protocol" arguments="%s"/>
+  </actions>
 </toast>
 "@
 
@@ -201,17 +241,31 @@ $doc = [Windows.Data.Xml.Dom.XmlDocument]::new()
 $doc.LoadXml($xml)
 $toast = [Windows.UI.Notifications.ToastNotification]::new($doc)
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("EasyWinGet").Show($toast)
-`, strings.ReplaceAll(title, `"`, `\"`), strings.ReplaceAll(message, `"`, `\"`), strings.ReplaceAll(iconSrc, `"`, `\"`))
+`, strings.ReplaceAll(launchUri, `"`, `\"`), strings.ReplaceAll(title, `"`, `\"`), strings.ReplaceAll(message, `"`, `\"`), strings.ReplaceAll(iconSrc, `"`, `\"`), strings.ReplaceAll(actionTitle, `"`, `\"`), strings.ReplaceAll(launchUri, `"`, `\"`))
 	} else {
 		script = fmt.Sprintf(`
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-$textNodes = $template.GetElementsByTagName("text")
-$textNodes.Item(0).AppendChild($template.CreateTextNode("%s")) | Out-Null
-$textNodes.Item(1).AppendChild($template.CreateTextNode("%s")) | Out-Null
-$toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+
+$xml = @"
+<toast activationType="protocol" launch="%s">
+  <visual>
+    <binding template="ToastGeneric">
+      <text>%s</text>
+      <text>%s</text>
+    </binding>
+  </visual>
+  <actions>
+    <action content="%s" activationType="protocol" arguments="%s"/>
+  </actions>
+</toast>
+"@
+
+$doc = [Windows.Data.Xml.Dom.XmlDocument]::new()
+$doc.LoadXml($xml)
+$toast = [Windows.UI.Notifications.ToastNotification]::new($doc)
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("EasyWinGet").Show($toast)
-`, strings.ReplaceAll(title, `"`, `\"`), strings.ReplaceAll(message, `"`, `\"`))
+`, strings.ReplaceAll(launchUri, `"`, `\"`), strings.ReplaceAll(title, `"`, `\"`), strings.ReplaceAll(message, `"`, `\"`), strings.ReplaceAll(actionTitle, `"`, `\"`), strings.ReplaceAll(launchUri, `"`, `\"`))
 	}
 
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)

@@ -1,6 +1,7 @@
 <script>
   export let toasts = [];
   export let removeToast = (id) => {};
+  export let onToastClick = (t) => {};
 
   let lastToastId = null;
 
@@ -49,8 +50,19 @@
     {#each toasts as t (t.id)}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="android-toast" on:click={() => removeToast(t.id)} title="Click to dismiss">
+      <div 
+        class="android-toast" 
+        class:has-action={Boolean(t.actionTab)}
+        on:click={() => { 
+          if (t.actionTab) onToastClick(t); 
+          removeToast(t.id); 
+        }} 
+        title={t.actionTab ? 'Click to open Updates tab' : 'Click to dismiss'}
+      >
         <span class="toast-text">{t.message || t.title}</span>
+        {#if t.actionTab}
+          <span class="toast-action-hint">View</span>
+        {/if}
       </div>
     {/each}
   </div>
@@ -95,6 +107,18 @@
 
   .android-toast:active {
     transform: scale(0.96);
+  }
+
+  .toast-action-hint {
+    margin-left: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill, 100px);
+    background: var(--accent-primary, #0078d4);
+    color: #ffffff;
+    letter-spacing: 0.3px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   }
 
   :global([data-theme="light"]) .android-toast {

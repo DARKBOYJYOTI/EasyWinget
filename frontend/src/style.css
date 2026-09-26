@@ -607,3 +607,11 @@ html.is-window-maximized .package-card {
   cursor: revert !important;
 }
 
+/* Zero CPU Usage in Background / Minimized: Pause all CSS animations */
+[data-window-hidden="true"] *,
+[data-window-hidden="true"] *::before,
+[data-window-hidden="true"] *::after {
+  animation-play-state: paused !important;
+}
+
+

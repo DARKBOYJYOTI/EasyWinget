@@ -91,15 +91,18 @@
   });
 
   let isHoveringFeatured = false;
+  let isWindowVisible = true;
 
   function resetAutoCycle() {
     if (autoCycleInterval) clearInterval(autoCycleInterval);
     autoCycleInterval = setInterval(() => {
-      if (searchQuery.trim() === '' && !isSearching && !isHoveringFeatured) {
-        const currentIndex = popularTabs.findIndex(t => t.id === activePopularTab);
-        const nextIndex = (currentIndex + 1) % popularTabs.length;
-        activePopularTab = popularTabs[nextIndex].id;
+      // Pause completely if window is hidden, minimized to tray, or blurred in background
+      if (document.hidden || !isWindowVisible || searchQuery.trim() !== '' || isSearching || isHoveringFeatured) {
+        return;
       }
+      const currentIndex = popularTabs.findIndex(t => t.id === activePopularTab);
+      const nextIndex = (currentIndex + 1) % popularTabs.length;
+      activePopularTab = popularTabs[nextIndex].id;
     }, 9500);
   }
 
@@ -108,15 +111,29 @@
     resetAutoCycle();
   }
 
+  function onVisibilityChange() {
+    isWindowVisible = !document.hidden && document.visibilityState === 'visible';
+  }
+
   onMount(() => {
     resetAutoCycle();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+      window.addEventListener('focus', () => { isWindowVisible = true; });
+      window.addEventListener('blur', () => {
+        if (document.hidden) isWindowVisible = false;
+      });
+    }
   });
-
 
   onDestroy(() => {
     if (autoCycleInterval) clearInterval(autoCycleInterval);
     if (debounceTimer) clearTimeout(debounceTimer);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    }
   });
+
 
   function handleInput() {
     clearTimeout(debounceTimer);
@@ -322,11 +339,8 @@
                 on:click={() => handleSelectPopularTab(tab.id)}
               >
                 <span>{tab.label}</span>
-                {#if activePopularTab === tab.id}
-                  <span class="tab-indicator"></span>
-                {/if}
-
               </button>
+
             {/each}
           </div>
         </div>
@@ -658,31 +672,9 @@
     font-weight: 600;
   }
 
-  .tab-indicator {
-    position: absolute;
-    bottom: 0;
-    left: 12%;
-    width: 76%;
-    height: 2px;
-    background: var(--accent-light, #60a5fa);
-    border-radius: 2px;
-    box-shadow: 0 0 6px var(--accent-light, #60a5fa);
-    animation: tabIndicatorSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-
-  @keyframes tabIndicatorSlide {
-    0% {
-      transform: scaleX(0.4);
-      opacity: 0;
-    }
-    100% {
-      transform: scaleX(1);
-      opacity: 1;
-    }
-  }
-
   .popular-grid-wrapper {
     position: relative;
+
     width: 100%;
     min-height: 280px;
   }
