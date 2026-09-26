@@ -1,0 +1,572 @@
+html {
+  font-size: 15.2px;
+  scroll-behavior: smooth;
+}
+
+:root {
+  /* System Typography - Optimized for Windows 11 Desktop & Laptop Displays */
+  --font-main: 'Segoe UI Variable Text', 'Segoe UI Variable Display', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Inter', 'Plus Jakarta Sans', Roboto, system-ui, sans-serif;
+  --font-mono: 'Cascadia Code', 'Cascadia Mono', 'Segoe UI Mono', Consolas, 'JetBrains Mono', monospace;
+
+  /* Windows 11 Dark Theme (Matching Windows 11 Settings Image 4) */
+  --bg-app: #202020;
+  --bg-sidebar: #202020;
+  --bg-surface: #262626;
+  --bg-card: #2b2b2b;
+  --bg-card-hover: #323232;
+  --bg-card-active: #383838;
+  --bg-input: #2b2b2b;
+  --bg-input-focus: #323232;
+  --bg-terminal: #181818;
+
+  /* Borders & Dividers */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-card: rgba(255, 255, 255, 0.08);
+  --border-card-hover: rgba(255, 255, 255, 0.16);
+  --border-focus: #60cdff;
+
+  /* Windows 11 Fluent Accent Colors */
+  --accent-primary: #0078d4;
+  --accent-light: #60cdff;
+  --accent-hover: #1084d8;
+  --accent-active: #005a9e;
+  --accent-text: #ffffff;
+  --accent-contrast-text: #ffffff;
+  --accent-badge-bg: rgba(96, 205, 255, 0.14);
+  --accent-badge-border: rgba(96, 205, 255, 0.28);
+  --accent-glow: rgba(96, 205, 255, 0.25);
+
+  /* Status Colors */
+  --color-success: #107c41;
+  --color-success-light: #6ccb5f;
+  --color-success-bg: rgba(16, 124, 65, 0.2);
+  --color-warning: #fce100;
+  --color-warning-text: #ffd33d;
+  --color-warning-bg: rgba(252, 225, 0, 0.15);
+  --color-danger: #d13438;
+  --color-danger-light: #ff99a4;
+  --color-danger-bg: rgba(209, 52, 56, 0.2);
+
+  /* Text Colors - High contrast for dark mode */
+  --text-primary: #ffffff;
+  --text-secondary: #e0e0e0;
+  --text-muted: #b4b4b4;
+  --text-disabled: #757575;
+
+  /* Shadows - Fluent Depth */
+  --shadow-flyout: 0 8px 24px rgba(0, 0, 0, 0.36), 0 2px 8px rgba(0, 0, 0, 0.24);
+  --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.2);
+  --shadow-none: none;
+
+  /* Radii - Windows 11 Standard */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+
+  /* Transitions */
+  --transition-fast: 0.12s cubic-bezier(0.1, 0.9, 0.2, 1);
+  --transition-normal: 0.2s cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+
+/* Light Theme (Matching Windows 11 Settings Image 5) */
+[data-theme="light"] {
+  --bg-app: #f3f3f3;
+  --bg-sidebar: #f3f3f3;
+  --bg-surface: #f9f9f9;
+  --bg-card: #ffffff;
+  --bg-card-hover: #fcfcfc;
+  --bg-card-active: #f5f5f5;
+  --bg-input: #ffffff;
+  --bg-input-focus: #ffffff;
+  --bg-terminal: #1e1e1e;
+
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-card: rgba(0, 0, 0, 0.08);
+  --border-card-hover: rgba(0, 0, 0, 0.16);
+  --border-focus: #005fb8;
+
+  --accent-primary: #005fb8;
+  --accent-light: #005fb8;
+  --accent-hover: #0054a6;
+  --accent-active: #00458a;
+  --accent-text: #ffffff;
+  --accent-contrast-text: #ffffff;
+  --accent-badge-bg: rgba(0, 95, 184, 0.09);
+  --accent-badge-border: rgba(0, 95, 184, 0.22);
+  --accent-glow: rgba(0, 95, 184, 0.2);
+
+  --color-success: #107c41;
+  --color-success-light: #107c41;
+  --color-success-bg: rgba(16, 124, 65, 0.12);
+  --color-warning: #9d5d00;
+  --color-warning-text: #7f4b00;
+  --color-warning-bg: rgba(157, 93, 0, 0.12);
+  --color-danger: #c42b1c;
+  --color-danger-light: #c42b1c;
+  --color-danger-bg: rgba(196, 43, 28, 0.12);
+
+  --text-primary: #191919;
+  --text-secondary: #5c5c5c;
+  --text-muted: #797979;
+  --text-disabled: #a0a0a0;
+
+  --shadow-flyout: 0 8px 24px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* Light Theme Component Overrides */
+[data-theme="light"] .nav-item:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+[data-theme="light"] .nav-item.active {
+  background: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .nav-item.active .nav-indicator {
+  background: var(--accent-primary) !important;
+}
+[data-theme="light"] .search-box,
+[data-theme="light"] .search-input-wrap {
+  background: #ffffff !important;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.2) !important;
+}
+[data-theme="light"] .theme-card.selected {
+  border-color: var(--accent-primary) !important;
+  background: rgba(0, 95, 184, 0.06) !important;
+}
+[data-theme="light"] .check-badge {
+  background: var(--accent-primary) !important;
+  color: #ffffff !important;
+}
+
+/* Light Theme Console (Windows Terminal Light) */
+[data-theme="light"] .terminal-view {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+[data-theme="light"] .terminal-header {
+  background: #f8fafc !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .terminal-body {
+  background: #ffffff !important;
+}
+[data-theme="light"] .terminal-content {
+  color: #0f172a !important;
+  font-weight: 500 !important;
+}
+[data-theme="light"] .interactive-bar {
+  background: #f8fafc !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Light Theme Logo & Icons */
+[data-theme="light"] .brand-icon-svg {
+  color: #0f172a !important;
+}
+[data-theme="light"] .logo-box {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+[data-theme="light"] .icon-container {
+  background: rgba(0, 0, 0, 0.04) !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Windows Transparency Effects (Mica & Acrylic Material Integration) */
+[data-transparency="true"] {
+  --bg-app: rgba(32, 32, 32, 0.70);
+  --bg-sidebar: rgba(26, 26, 26, 0.55);
+  --bg-surface: rgba(38, 38, 38, 0.60);
+  --bg-card: rgba(43, 43, 43, 0.65);
+  --bg-card-hover: rgba(55, 55, 55, 0.80);
+}
+
+[data-theme="light"][data-transparency="true"] {
+  --bg-app: rgba(243, 243, 243, 0.72);
+  --bg-sidebar: rgba(238, 238, 238, 0.55);
+  --bg-surface: rgba(249, 249, 249, 0.65);
+  --bg-card: rgba(255, 255, 255, 0.70);
+  --bg-card-hover: rgba(255, 255, 255, 0.88);
+}
+
+[data-transparency="true"] body,
+[data-transparency="true"] #app,
+[data-transparency="true"] .app-layout {
+  background: transparent !important;
+}
+
+[data-transparency="true"] .sidebar {
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+}
+
+[data-transparency="true"] .search-header-zone,
+[data-transparency="true"] .sticky-top-zone {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(32, 32, 32, 0.65) !important;
+}
+
+[data-theme="light"][data-transparency="true"] .search-header-zone,
+[data-theme="light"][data-transparency="true"] .sticky-top-zone {
+  background: rgba(243, 243, 243, 0.65) !important;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-main);
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  scroll-behavior: smooth;
+}
+
+#app, .main-content, .search-page, .installed-page, .updates-page, .downloads-page, .settings-page, .terminal-body {
+  scroll-behavior: smooth;
+}
+
+#app {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* Custom Scrollbar - Fluent Style */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.35);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.55);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Windows 11 Native Buttons */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  /* NEVER transform: translateY on hover! */
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Accent Action Button (e.g. Install / Update) */
+.btn-primary {
+  background: var(--accent-primary);
+  color: var(--accent-text);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.btn-primary:active:not(:disabled) {
+  background: var(--accent-active);
+  transform: scale(0.985);
+}
+
+/* Standard Secondary Button */
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+}
+[data-theme="light"] .btn-secondary {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.14);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--border-card-hover);
+}
+[data-theme="light"] .btn-secondary:hover:not(:disabled) {
+  background: #f7f7f7;
+  border-color: rgba(0, 0, 0, 0.24);
+}
+.btn-secondary:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+/* Danger Button */
+.btn-danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-light);
+  border: 1px solid rgba(209, 52, 56, 0.3);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(209, 52, 56, 0.35);
+}
+.btn-danger:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+/* Ghost Button */
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+.btn-ghost:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* Input Fields */
+input, select {
+  font-family: inherit;
+  background: var(--bg-input);
+  border: 1px solid var(--border-card);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+input:focus, select:focus {
+  background: var(--bg-input-focus);
+  border-bottom-color: var(--border-focus);
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.badge-blue {
+  background: var(--accent-badge-bg, rgba(96, 205, 255, 0.15));
+  color: var(--accent-light, #60cdff);
+  border: 1px solid var(--accent-badge-border, rgba(96, 205, 255, 0.25));
+}
+[data-theme="light"] .badge-blue {
+  background: var(--accent-badge-bg, rgba(0, 95, 184, 0.1));
+  color: var(--accent-light, #005fb8);
+  border-color: var(--accent-badge-border, rgba(0, 95, 184, 0.2));
+}
+
+.badge-green {
+  background: var(--color-success-bg);
+  color: var(--color-success-light);
+  border: 1px solid rgba(16, 124, 65, 0.3);
+}
+
+.badge-amber {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border: 1px solid rgba(252, 225, 0, 0.25);
+}
+
+/* Fluent Toggle Switch */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 22px;
+}
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-card);
+  transition: var(--transition-fast);
+  border-radius: 22px;
+}
+.toggle-slider::before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--text-secondary);
+  transition: var(--transition-fast);
+  border-radius: 50%;
+}
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(22px);
+  background-color: #ffffff;
+}
+
+/* Keyframes */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-spin {
+  animation: spin 0.9s linear infinite;
+}
+
+.animate-pulse {
+  animation: pulseGlow 1.4s ease-in-out infinite;
+}
+
+/* Windows 11 Fluent Skeleton Shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  border-radius: var(--radius-sm);
+}
+
+[data-theme="light"] .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.04) 25%,
+    rgba(0, 0, 0, 0.09) 50%,
+    rgba(0, 0, 0, 0.04) 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* Fluid View Entrance Transitions */
+@keyframes viewFadeSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view-animated {
+  animation: viewFadeSlide 0.22s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+  height: 100%;
+  width: 100%;
+}
+
+/* Premium Interactive Micro-Animations - Windows 11 Fluent Glow (NO translateY jumping) */
+.app-card {
+  transition: background-color 0.18s cubic-bezier(0.1, 0.9, 0.2, 1), 
+              border-color 0.18s cubic-bezier(0.1, 0.9, 0.2, 1), 
+              box-shadow 0.18s cubic-bezier(0.1, 0.9, 0.2, 1) !important;
+}
+
+.app-card:hover {
+  transform: none !important;
+  background: var(--bg-card-hover) !important;
+  border-color: var(--accent-badge-border) !important;
+  box-shadow: 0 0 0 1px var(--accent-badge-border), 0 4px 18px var(--accent-glow) !important;
+}
+
+[data-theme="light"] .app-card:hover {
+  transform: none !important;
+  background: var(--bg-card-hover) !important;
+  border-color: var(--accent-badge-border) !important;
+  box-shadow: 0 0 0 1px var(--accent-badge-border), 0 3px 14px var(--accent-glow) !important;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.978) !important;
+  transition: transform 0.08s ease !important;
+}
+
+/* Suppress window edge resize cursors when window is maximized/fullscreen */
+html.is-window-maximized,
+html.is-window-maximized body {
+  cursor: default !important;
+}
+
+html.is-window-maximized button,
+html.is-window-maximized .btn-primary,
+html.is-window-maximized .btn-secondary,
+html.is-window-maximized .btn-danger,
+html.is-window-maximized input,
+html.is-window-maximized a,
+html.is-window-maximized .chip,
+html.is-window-maximized .sidebar-item,
+html.is-window-maximized .win-btn,
+html.is-window-maximized .file-card,
+html.is-window-maximized .package-card {
+  cursor: revert !important;
+}
+

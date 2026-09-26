@@ -1,85 +1,82 @@
-# 🚀 EasyWinGet
+# 🚀 EasyWinGet Native
 
-**The Professional Web Interface for Windows Package Manager (Winget).**
-_Modern. Fast. Offline-Capable._
+**Modern Desktop GUI for Windows Package Manager (WinGet).**
+_Ultra-fast, native, single-executable desktop application built with **Go** and **Svelte 5**._
 
 ![EasyWinGet Interface](assets/preview.png)
 
-EasyWinGet is a powerful, lightweight web-based GUI for Winget. It bridges the gap between the command line and a modern user experience, offering advanced features like bulk installation, task management, and offline support.
+EasyWinGet provides a beautiful, native desktop interface for Windows Package Manager (WinGet). It brings Windows 11 Fluent / Mica aesthetics, real-time interactive terminal logs, offline package caching, batch installs, and updates management directly to your desktop.
 
 ---
 
 ## ✨ Features
 
-- **🌐 Modern Web UI**: A sleek, responsive interface built with Vanilla JS and CSS (No heavy frameworks).
-- **📦 Bulk Operations**: Install, update, or uninstall multiple apps simultaneously.
-- **⚡ Fast Search**: Real-time search with caching and debouncing.
-- **🛑 Task Management**: Cancel running downloads or installations instantly.
-- **🔌 Offline Capable**:
-    - Bundled Node.js installer (no internet required to set up).
-    - Offline icon caching system.
-    - Graceful degradation when the internet is lost.
-- **🎨 Visual Feedback**: Real-time terminal logs, progress animations, and connection status indicators.
+- **⚡ Native Windows App**: Compiles into a single, lightweight `.exe` binary powered by **Go** and **Wails v2** (No Node.js runtime required for end-users!).
+- **🎨 Modern Svelte 5 Frontend**: Clean, responsive, glassmorphic Windows 11 Fluent UI with dark mode by default.
+- **🔍 Instant Search & Discover**: Fast package search across thousands of WinGet apps with categories, filters, and debouncing.
+- **📦 Installed Apps Manager**: View, filter, and uninstall applications (supporting both WinGet and Native Windows uninstallers).
+- **🔄 Updates Center**: Detect outdated applications, view version diffs, update individual apps or update all with one click, and ignore unwanted updates.
+- **💾 Offline Downloads Manager**: Download installer files (.exe, .msi, .msix) for backup, offline storage, or portable distribution.
+- **🖥️ Real-time Console**: Live streaming terminal execution with process cancellation support and background docking.
+- **📤 Export & Import**: Backup your installed applications list to JSON and easily restore them on a new PC.
 
 ---
 
-## 🛠️ Prerequisites
+## 🛠️ Requirements & Development
 
 - **OS**: Windows 10 (Version 1809+) or Windows 11.
-- **Winget**: Pre-installed on modern Windows.
-    - _Missing Winget?_ [Download App Installer from Microsoft](https://aka.ms/getwinget).
+- **WinGet**: Built into modern Windows systems.
+- **Go**: 1.24+
+- **Wails CLI**: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
+- **Node.js**: Required only for compiling the Svelte frontend during development.
 
----
+### Running in Development Mode
 
-## 📥 Installation
+```powershell
+wails dev
+```
 
-> **Note:** This release includes a bundled Node.js runtime and dependencies, making it fully portable and offline-ready.
+### Compiling Production Binary (.exe)
 
-### Option 1: Full Installation (Recommended)
-
-Installs EasyWinGet to `C:\EasyWinGet` and creates Desktop/Start Menu shortcuts.
-
-1.  **Download** the latest release `.zip` from GitHub.
-2.  Extract the folder.
-3.  Right-click `install.bat` and select **Run as Administrator**.
-4.  The script will:
-    - Install Node.js (if missing).
-    - Copy files to `C:\EasyWinGet`.
-    - Setup dependencies.
-    - Create shortcuts on your Desktop and Start Menu.
-5.  Launch **EasyWinGet** from your Desktop!
-
-### Option 2: Portable Mode
-
-Run directly from the folder without installing.
-
-1.  **Download** & Extract the release.
-2.  Double-click `run.bat`.
-3.  The script will locally check/install dependencies and launch the server.
+```powershell
+wails build
+```
+The compiled single `.exe` is generated at `build/bin/EasyWinGet.exe`.
 
 ---
 
 ## 📂 Project Structure
 
-```bash
+```
 EasyWinGet/
-├── gui/                  # Frontend Source
-│   ├── index.html        # Main Entry
-│   ├── script.js         # Core Logic (UI, API calls)
-│   └── style.css         # Styling & Animations
-├── server.js             # Backend (Express + Node-PTY)
-├── utils/                # Helper Scripts
-│   ├── winget.js         # Winget Wrapper
-│   └── jobs.js           # Process Manager
-├── data/                 # Local Data & Cache
-├── offline-packages/     # Bundled Dependencies (Node.js, NPM modules)
-├── install.bat           # Automated Installer Script
-└── run.bat               # Portable Launcher Script
+├── backend/              # Go Backend Services
+│   ├── cache/            # Thread-safe JSON caching
+│   ├── downloads/        # Installer downloads manager
+│   ├── icons/            # Manifest and local app icon resolution
+│   ├── jobs/             # Real-time background job runner & streaming
+│   ├── models/           # Shared data structures
+│   └── winget/           # WinGet CLI wrapper & parsers
+├── frontend/             # Modern Svelte 5 + Vite UI
+│   ├── src/
+│   │   ├── components/   # Svelte components (Sidebar, Search, Installed, Updates, etc.)
+│   │   ├── App.svelte    # Root UI coordinator
+│   │   ├── main.js       # Entry point
+│   │   └── style.css     # Fluent Mica design system & tokens
+│   ├── wailsjs/          # Auto-generated Go-to-Svelte bindings
+│   └── package.json
+├── build/                # Windows application assets & manifest
+│   ├── appicon.png       # App icon
+│   └── bin/              # Compiled output (EasyWinGet.exe)
+├── utils/                # Helper PowerShell scripts (icons, native uninstall)
+├── main.go               # Wails app initialization & native window configuration
+├── app.go                # Wails API bridges
+├── wails.json            # Wails project config
+└── run.bat               # Quick launcher
 ```
 
 ---
 
 ## 🛡️ License
 
-This project is open-source. Feel free to modify and distribute.
-_Powered by [Winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/)._
+This project is open-source under the [MIT License](LICENSE).
+Developed by Jyoti Karmakar ([DARKBOYJYOTI](https://github.com/DARKBOYJYOTI)).

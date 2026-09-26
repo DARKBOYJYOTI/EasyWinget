@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 package-lock.json
+frontend/node_modules/
+frontend/package-lock.json
 
 # Application Cache (local data)
 gui/cache/
@@ -9,6 +11,7 @@ jobs/*
 Downloads/*
 data/icons/*
 data/*.json
+data/*.db*
 *.json.bak
 
 # Logs and temporary files
@@ -34,9 +37,22 @@ agent.md
 
 # Build/Dist
 dist/
-build/
+build/bin/
+frontend/dist/
+*.exe
 
 # Miscellaneous
 test-setup.bat
 START.bat
 test_cmd_c.js
+
+# Backup folder
+.bak/
+.bak
+
+
+# Scratchpad
+scratch/
+
+
+
