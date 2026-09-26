@@ -89,6 +89,7 @@ export function computeAccentPalette(hexColor, isDark = true) {
 
     return {
       '--accent-primary': primaryHex,
+      '--accent-color': primaryHex,
       '--accent-hover': hoverHex,
       '--accent-active': activeHex,
       '--accent-light': readableTextHex,
@@ -97,7 +98,10 @@ export function computeAccentPalette(hexColor, isDark = true) {
       '--accent-badge-bg': `hsla(${h}, ${textSaturation}%, ${textLightness}%, 0.14)`,
       '--accent-badge-border': `hsla(${h}, ${textSaturation}%, ${textLightness}%, 0.30)`,
       '--accent-glow': `hsla(${h}, ${s}%, ${l}%, 0.32)`,
-      '--border-focus': readableTextHex
+      '--border-focus': readableTextHex,
+      '--accent-scrollbar-idle': `hsla(${h}, ${s}%, ${l}%, 0.42)`,
+      '--accent-scrollbar-hover': readableTextHex,
+      '--accent-scrollbar-active': primaryHex
     };
   } else {
     // Windows Light Mode:
@@ -111,6 +115,7 @@ export function computeAccentPalette(hexColor, isDark = true) {
 
     return {
       '--accent-primary': primaryHex,
+      '--accent-color': primaryHex,
       '--accent-hover': hoverHex,
       '--accent-active': activeHex,
       '--accent-light': readableTextHex,
@@ -119,7 +124,10 @@ export function computeAccentPalette(hexColor, isDark = true) {
       '--accent-badge-bg': `hsla(${h}, ${textSaturation}%, ${textLightness}%, 0.09)`,
       '--accent-badge-border': `hsla(${h}, ${textSaturation}%, ${textLightness}%, 0.24)`,
       '--accent-glow': `hsla(${h}, ${s}%, ${l}%, 0.22)`,
-      '--border-focus': readableTextHex
+      '--border-focus': readableTextHex,
+      '--accent-scrollbar-idle': `hsla(${h}, ${s}%, ${l}%, 0.40)`,
+      '--accent-scrollbar-hover': primaryHex,
+      '--accent-scrollbar-active': activeHex
     };
   }
 }
