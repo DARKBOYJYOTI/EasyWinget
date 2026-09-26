@@ -33,6 +33,7 @@
   let installedCount = 0;
   let updatesCount = 0;
   let downloadsCount = 0;
+  let searchCount = null;
   let appVersion = '4.0.0';
   let themePreference = 'dark'; // 'dark' | 'light' | 'auto'
   let currentTheme = 'dark';    // rendered theme 'dark' | 'light'
@@ -331,6 +332,7 @@
     {installedCount} 
     {updatesCount} 
     {downloadsCount} 
+    {searchCount}
     {isJobRunning}
     version={appVersion}
   />
@@ -344,6 +346,7 @@
           onStartJob={handleStartJob}
           onShowToast={showToast}
           onConfirmRequest={requestConfirm}
+          onUpdateCount={(c) => searchCount = c}
         />
       </div>
     {:else if activeTab === 'installed'}

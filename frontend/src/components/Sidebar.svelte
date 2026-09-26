@@ -15,6 +15,7 @@
   export let installedCount = 0;
   export let updatesCount = 0;
   export let downloadsCount = 0;
+  export let searchCount = null;
   export let isJobRunning = false;
   export let version = '4.0.0';
 </script>
@@ -41,6 +42,9 @@
       <div class="nav-indicator"></div>
       <Search size={19} class="nav-icon" />
       <span class="nav-label">Discover</span>
+      {#if searchCount !== null && searchCount !== undefined}
+        <span class="count-pill search-pill" class:zero-pill={searchCount === 0}>{searchCount}</span>
+      {/if}
     </button>
 
     <button 
@@ -308,6 +312,42 @@
     background: var(--color-warning-bg);
     color: var(--color-warning-text);
     border: 1px solid rgba(252, 225, 0, 0.3);
+  }
+
+  .search-pill {
+    background: var(--accent-badge-bg, rgba(96, 205, 255, 0.14));
+    color: var(--accent-light, #60cdff);
+    border: 1px solid var(--accent-badge-border, rgba(96, 205, 255, 0.28));
+    animation: searchPillPop 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .search-pill.zero-pill {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted, #888888);
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  }
+
+  :global([data-theme="light"]) .search-pill {
+    background: var(--accent-badge-bg, rgba(0, 120, 212, 0.1));
+    color: var(--accent-primary, #0078d4);
+    border-color: var(--accent-badge-border, rgba(0, 120, 212, 0.25));
+  }
+
+  :global([data-theme="light"]) .search-pill.zero-pill {
+    background: rgba(0, 0, 0, 0.05);
+    color: rgba(0, 0, 0, 0.45);
+    border-color: rgba(0, 0, 0, 0.08);
+  }
+
+  @keyframes searchPillPop {
+    0% {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
   }
 
   .pulse-indicator {

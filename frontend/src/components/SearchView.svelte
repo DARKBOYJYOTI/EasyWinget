@@ -9,6 +9,7 @@
   export let onStartJob = (jobId, title) => {};
   export let onShowToast = (type, title, msg) => {};
   export let onConfirmRequest = async (opts) => true;
+  export let onUpdateCount = (count) => {};
   export let installedIds = new Set();
 
   function isInstalled(pkg) {
@@ -141,6 +142,7 @@
       searchResults = [];
       hasSearched = false;
       isSearching = false;
+      onUpdateCount(null);
       return;
     }
     debounceTimer = setTimeout(() => {
@@ -148,9 +150,20 @@
     }, 350);
   }
 
+  function handleClearSearch() {
+    searchQuery = '';
+    searchResults = [];
+    hasSearched = false;
+    isSearching = false;
+    onUpdateCount(null);
+  }
+
   async function executeSearch() {
     const q = searchQuery.trim();
-    if (q.length < 2) return;
+    if (q.length < 2) {
+      if (q.length === 0) onUpdateCount(null);
+      return;
+    }
 
     isSearching = true;
     hasSearched = true;
@@ -158,9 +171,11 @@
     try {
       const results = await SearchApps(q);
       searchResults = results || [];
+      onUpdateCount(searchResults.length);
     } catch (err) {
       onShowToast('error', 'Search Failed', String(err));
       searchResults = [];
+      onUpdateCount(0);
     } finally {
       isSearching = false;
     }
@@ -233,7 +248,7 @@
             on:keydown={(e) => e.key === 'Enter' && executeSearch()}
           />
           {#if searchQuery}
-            <button class="clear-btn" on:click={() => { searchQuery = ''; searchResults = []; hasSearched = false; }} title="Clear search" aria-label="Clear search">
+            <button class="clear-btn" on:click={handleClearSearch} title="Clear search" aria-label="Clear search">
               <X size={15} />
             </button>
           {/if}
