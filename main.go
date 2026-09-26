@@ -58,9 +58,16 @@ func main() {
 			initTray(app, ctx)
 		},
 
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: "easywinget-windows-native-single-instance-lock-guid",
+			OnSecondInstanceLaunch: func(secondInstanceData options.SecondInstanceData) {
+				app.RestoreWindow()
+			},
+		},
 		OnShutdown: func(ctx context.Context) {
 			systray.Quit()
 		},
+
 		Bind: []interface{}{
 			app,
 		},

@@ -52,6 +52,8 @@ export function OpenDownloadedFolder(arg1:string):Promise<void>;
 
 export function OpenDownloadsDirectory():Promise<void>;
 
+export function RestoreWindow():Promise<void>;
+
 export function RunCommand(arg1:string):Promise<string>;
 
 export function RunDownloadedInstaller(arg1:string):Promise<string>;

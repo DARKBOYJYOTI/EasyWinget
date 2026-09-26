@@ -88,7 +88,19 @@ func (a *App) startup(ctx context.Context) {
 	go a.startNetworkAndStartupUpdateChecker()
 }
 
+// RestoreWindow brings the existing EasyWinGet window to foreground and unminimizes it
+func (a *App) RestoreWindow() {
+	if a.ctx == nil {
+		return
+	}
+	wailsRuntime.WindowShow(a.ctx)
+	wailsRuntime.WindowUnminimise(a.ctx)
+	wailsRuntime.WindowSetAlwaysOnTop(a.ctx, true)
+	wailsRuntime.WindowSetAlwaysOnTop(a.ctx, false)
+}
+
 // startNetworkAndStartupUpdateChecker waits for internet connection and checks for updates
+
 func (a *App) startNetworkAndStartupUpdateChecker() {
 	// Wait a moment for UI to mount
 	time.Sleep(2 * time.Second)

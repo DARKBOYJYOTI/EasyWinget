@@ -102,6 +102,10 @@ export function OpenDownloadsDirectory() {
   return window['go']['main']['App']['OpenDownloadsDirectory']();
 }
 
+export function RestoreWindow() {
+  return window['go']['main']['App']['RestoreWindow']();
+}
+
 export function RunCommand(arg1) {
   return window['go']['main']['App']['RunCommand'](arg1);
 }
