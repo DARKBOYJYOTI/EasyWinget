@@ -90,16 +90,28 @@
     return p.tab === activePopularTab;
   });
 
-  onMount(() => {
-    // Subtle auto-cycle through popular categories every 12 seconds if user is idle
+  let isHoveringFeatured = false;
+
+  function resetAutoCycle() {
+    if (autoCycleInterval) clearInterval(autoCycleInterval);
     autoCycleInterval = setInterval(() => {
-      if (searchQuery.trim() === '' && !isSearching) {
+      if (searchQuery.trim() === '' && !isSearching && !isHoveringFeatured) {
         const currentIndex = popularTabs.findIndex(t => t.id === activePopularTab);
         const nextIndex = (currentIndex + 1) % popularTabs.length;
         activePopularTab = popularTabs[nextIndex].id;
       }
-    }, 12000);
+    }, 9500);
+  }
+
+  function handleSelectPopularTab(tabId) {
+    activePopularTab = tabId;
+    resetAutoCycle();
+  }
+
+  onMount(() => {
+    resetAutoCycle();
   });
+
 
   onDestroy(() => {
     if (autoCycleInterval) clearInterval(autoCycleInterval);
@@ -183,8 +195,9 @@
   }
 </script>
 
-<div class="search-page view-animated" class:hide-scrollbar={!hasSearched && searchResults.length === 0}>
+<div class="search-page view-animated">
   <!-- Sticky Top Zone: Title + Spaced Search Box + Category Chips -->
+
   <div class="search-header-zone">
     <div class="search-header">
       <div class="header-text">
@@ -289,7 +302,13 @@
       </div>
     {:else}
       <!-- Featured / Popular Apps with Category Filter & Auto-Cycle -->
-      <div class="featured-section">
+      <div 
+        class="featured-section"
+        on:mouseenter={() => isHoveringFeatured = true}
+        on:mouseleave={() => isHoveringFeatured = false}
+        role="region"
+        aria-label="Popular Software Categories"
+      >
         <div class="section-header">
           <div class="section-title">
             <Globe size={18} color="var(--accent-light)" />
@@ -300,52 +319,64 @@
             {#each popularTabs as tab}
               <button 
                 class="tab-btn {activePopularTab === tab.id ? 'active' : ''}"
-                on:click={() => activePopularTab = tab.id}
+                on:click={() => handleSelectPopularTab(tab.id)}
               >
-                {tab.label}
+                <span>{tab.label}</span>
+                {#if activePopularTab === tab.id}
+                  <span class="tab-indicator"></span>
+                {/if}
+
               </button>
             {/each}
           </div>
         </div>
 
-        <div class="results-grid">
-          {#each displayedPopular as pkg (pkg.id)}
-            <div class="app-card">
-              <div class="app-card-header">
-                <AppIcon packageId={pkg.id} name={pkg.name} size={46} />
+        <div class="popular-grid-wrapper">
+          {#key activePopularTab}
+            <div class="results-grid popular-results-grid">
+              {#each displayedPopular as pkg, i (pkg.id)}
+                <div 
+                  class="app-card popular-card-animated"
+                  style="--card-delay: {i * 40}ms;"
+                >
+                  <div class="app-card-header">
+                    <AppIcon packageId={pkg.id} name={pkg.name} size={46} />
 
-                <div class="app-info">
-                  <div class="app-name" title={pkg.name}>{pkg.name}</div>
-                  <div class="app-id" title={pkg.id}>{pkg.id}</div>
+                    <div class="app-info">
+                      <div class="app-name" title={pkg.name}>{pkg.name}</div>
+                      <div class="app-id" title={pkg.id}>{pkg.id}</div>
+                    </div>
+                    {#if pkg.badge}
+                      <span class="badge badge-blue">{pkg.badge}</span>
+                    {/if}
+                  </div>
+
+                  <div class="app-card-actions">
+                    {#if isInstalled(pkg)}
+                      <button class="btn-installed flex-1" title="Already installed - Click to view info" on:click={() => onOpenDetails(pkg.id)}>
+                        <Check size={14} class="installed-check" />
+                        <span>Installed</span>
+                      </button>
+                    {:else}
+                      <button class="btn-primary btn-install flex-1" on:click={() => handleInstall(pkg)}>
+                        <span>Install</span>
+                      </button>
+                    {/if}
+                    <button class="btn-secondary btn-action" title="Download Installer" on:click={() => handleDownload(pkg)}>
+                      <Download size={14} />
+                    </button>
+                    <button class="btn-secondary btn-action" title="View Details" on:click={() => onOpenDetails(pkg.id)}>
+                      <Info size={14} />
+                    </button>
+                  </div>
                 </div>
-                {#if pkg.badge}
-                  <span class="badge badge-blue">{pkg.badge}</span>
-                {/if}
-              </div>
-
-              <div class="app-card-actions">
-                {#if isInstalled(pkg)}
-                  <button class="btn-installed flex-1" title="Already installed - Click to view info" on:click={() => onOpenDetails(pkg.id)}>
-                    <Check size={14} class="installed-check" />
-                    <span>Installed</span>
-                  </button>
-                {:else}
-                  <button class="btn-primary btn-install flex-1" on:click={() => handleInstall(pkg)}>
-                    <span>Install</span>
-                  </button>
-                {/if}
-                <button class="btn-secondary btn-action" title="Download Installer" on:click={() => handleDownload(pkg)}>
-                  <Download size={14} />
-                </button>
-                <button class="btn-secondary btn-action" title="View Details" on:click={() => onOpenDetails(pkg.id)}>
-                  <Info size={14} />
-                </button>
-              </div>
+              {/each}
             </div>
-          {/each}
+          {/key}
         </div>
       </div>
     {/if}
+
   </div>
 </div>
 
@@ -358,20 +389,11 @@
     padding: 0;
   }
 
-  .search-page.hide-scrollbar {
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
-  }
-
-  .search-page.hide-scrollbar::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
-  }
-
   .search-header-zone {
     background: var(--bg-app);
     border-bottom: 1px solid var(--border-subtle);
+
+
     padding: 26px 36px 20px 36px;
     flex-shrink: 0;
     z-index: 10;
@@ -534,6 +556,8 @@
 
   .search-body {
     flex: 1;
+    overflow-y: auto;
+    padding: 24px 36px 48px 36px;
   }
 
   .loading-state {
@@ -602,29 +626,90 @@
   .popular-tabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 6px;
   }
 
   .tab-btn {
+    position: relative;
     background: transparent;
-    border: none;
+    border: 1px solid transparent;
     color: var(--text-muted);
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     font-weight: 500;
-    padding: 4px 10px;
-    border-radius: var(--radius-xs);
-    transition: background-color var(--transition-fast), color var(--transition-fast);
+    padding: 5px 12px;
+    border-radius: var(--radius-sm, 6px);
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
   }
 
   .tab-btn:hover {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .tab-btn.active {
-    color: var(--accent-light);
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--accent-light, #60a5fa);
+    background: var(--accent-badge-bg, rgba(96, 165, 250, 0.12));
+    border-color: var(--accent-badge-border, rgba(96, 165, 250, 0.28));
     font-weight: 600;
+  }
+
+  .tab-indicator {
+    position: absolute;
+    bottom: 0;
+    left: 12%;
+    width: 76%;
+    height: 2px;
+    background: var(--accent-light, #60a5fa);
+    border-radius: 2px;
+    box-shadow: 0 0 6px var(--accent-light, #60a5fa);
+    animation: tabIndicatorSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes tabIndicatorSlide {
+    0% {
+      transform: scaleX(0.4);
+      opacity: 0;
+    }
+    100% {
+      transform: scaleX(1);
+      opacity: 1;
+    }
+  }
+
+  .popular-grid-wrapper {
+    position: relative;
+    width: 100%;
+    min-height: 280px;
+  }
+
+  .popular-results-grid {
+    width: 100%;
+  }
+
+  .popular-card-animated {
+    animation: popularCardSlideIn 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--card-delay, 0ms);
+  }
+
+  @keyframes popularCardSlideIn {
+    0% {
+      opacity: 0;
+      transform: translateY(16px) scale(0.975);
+      filter: blur(3px);
+    }
+    60% {
+      filter: blur(0);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
   }
 
   .results-grid {
@@ -632,6 +717,7 @@
     grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
     gap: 16px;
   }
+
 
   .app-card {
     background: var(--bg-card);

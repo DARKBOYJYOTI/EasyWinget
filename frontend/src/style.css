@@ -246,25 +246,62 @@ body {
   overflow: hidden;
 }
 
-/* Custom Scrollbar - Fluent Style */
+/* Windows 11 Fluent Dynamic Expandable Scrollbar */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Default / Idle: Sleek 4px pill centered in 14px channel */
 ::-webkit-scrollbar-thumb {
-  background: rgba(128, 128, 128, 0.35);
-  border: 3px solid transparent;
+  background-color: rgba(255, 255, 255, 0.22);
+  border: 5px solid transparent;
   background-clip: padding-box;
-  border-radius: 6px;
+  border-radius: 999px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(128, 128, 128, 0.55);
-  border: 3px solid transparent;
-  background-clip: padding-box;
+
+:global([data-theme="light"]) ::-webkit-scrollbar-thumb,
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.22);
 }
+
+/* When parent container is hovered, thumb gains slight presence */
+*:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.32);
+}
+
+:global([data-theme="light"]) *:hover::-webkit-scrollbar-thumb,
+[data-theme="light"] *:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.30);
+}
+
+/* Windows 11 Expansion: When cursor is near/on scrollbar, expand from 4px to 10px pill */
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar:hover ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.58) !important;
+  border: 2px solid transparent !important;
+  border-radius: 999px !important;
+}
+
+:global([data-theme="light"]) ::-webkit-scrollbar-thumb:hover,
+:global([data-theme="light"]) ::-webkit-scrollbar:hover ::-webkit-scrollbar-thumb,
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover,
+[data-theme="light"] ::-webkit-scrollbar:hover ::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.52) !important;
+  border: 2px solid transparent !important;
+}
+
+/* When clicking / dragging */
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--accent-color, #0078d4) !important;
+  border: 1.5px solid transparent !important;
+}
+
 
 /* Windows 11 Native Buttons */
 button {
