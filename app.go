@@ -10,11 +10,17 @@ import (
 	"easywinget/backend/models"
 	"easywinget/backend/system"
 	"easywinget/backend/winget"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -35,13 +41,8 @@ type App struct {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	baseDir, err := os.Getwd()
-	if err != nil {
-		baseDir = "."
-	}
-
-	dataDir := filepath.Join(baseDir, "data")
-	jobsLogDir := filepath.Join(baseDir, "jobs")
+	dataDir := system.GetEasyWinGetDataDir()
+	jobsLogDir := system.GetEasyWinGetJobsDir()
 	downloadDir := system.GetEasyWinGetDownloadDir()
 	iconsDir := filepath.Join(dataDir, "icons")
 
@@ -96,6 +97,11 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	if a.jobManager != nil {
 		a.jobManager.SetContext(ctx)
+		a.jobManager.SetOnJobDone(func(e models.JobDoneEvent) {
+			if e.Success {
+				go a.refreshAllInBackground()
+			}
+		})
 	}
 
 	// Register easywinget:// URL protocol handler in HKCU
@@ -112,10 +118,7 @@ func (a *App) startup(ctx context.Context) {
 
 	// Realtime listener: when any winget job finishes, sync SQLite and notify frontend
 	wailsRuntime.EventsOn(ctx, "job:done", func(optionalData ...interface{}) {
-		go func() {
-			time.Sleep(1 * time.Second)
-			a.refreshAllInBackground()
-		}()
+		go a.refreshAllInBackground()
 	})
 
 	// If initial tab was requested (e.g. from protocol link), navigate after frontend mounts
@@ -139,9 +142,12 @@ func (a *App) RestoreWindow() {
 		return
 	}
 	wailsRuntime.WindowShow(a.ctx)
-	wailsRuntime.WindowUnminimise(a.ctx)
+	if wailsRuntime.WindowIsMinimised(a.ctx) {
+		wailsRuntime.WindowUnminimise(a.ctx)
+	}
 	wailsRuntime.WindowSetAlwaysOnTop(a.ctx, true)
 	wailsRuntime.WindowSetAlwaysOnTop(a.ctx, false)
+	wailsRuntime.EventsEmit(a.ctx, "app:restored")
 }
 
 // startNetworkAndStartupUpdateChecker waits for internet connection and checks for updates on startup
@@ -260,25 +266,47 @@ func (a *App) startPeriodicUpdateChecker() {
 	}
 }
 
+// RefreshAll triggers a fresh concurrent rescan of registry, winget installed, and winget updates
+func (a *App) RefreshAll() {
+	go a.refreshAllInBackground()
+}
+
 // refreshAllInBackground silently refreshes installed apps and available updates
 func (a *App) refreshAllInBackground() {
-	if apps, err := winget.ListInstalled(); err == nil && len(apps) > 0 {
-		if a.dbStorage != nil {
-			_ = a.dbStorage.SaveInstalledApps(apps)
-		}
-		if a.ctx != nil {
-			wailsRuntime.EventsEmit(a.ctx, "installed:updated", apps)
-		}
+	// 1. Rescan native Windows registry cache (BCUninstaller style)
+	if scanner := installed.GetScanner(); scanner != nil {
+		scanner.Refresh()
 	}
 
-	if updates, err := winget.ListUpdates(); err == nil {
-		if a.dbStorage != nil {
-			_ = a.dbStorage.SaveAvailableUpdates(updates)
+	// 2. Scan installed apps and available updates concurrently for maximum speed
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if apps, err := winget.ListInstalled(); err == nil && len(apps) > 0 {
+			if a.dbStorage != nil {
+				_ = a.dbStorage.SaveInstalledApps(apps)
+			}
+			if a.ctx != nil {
+				wailsRuntime.EventsEmit(a.ctx, "installed:updated", apps)
+			}
 		}
-		if a.ctx != nil {
-			wailsRuntime.EventsEmit(a.ctx, "updates:updated", updates)
+	}()
+
+	go func() {
+		defer wg.Done()
+		if updates, err := winget.ListUpdates(); err == nil {
+			if a.dbStorage != nil {
+				_ = a.dbStorage.SaveAvailableUpdates(updates)
+			}
+			if a.ctx != nil {
+				wailsRuntime.EventsEmit(a.ctx, "updates:updated", updates)
+			}
 		}
-	}
+	}()
+
+	wg.Wait()
 }
 
 // GetAppVersion returns the current EasyWinGet version
@@ -377,6 +405,7 @@ func (a *App) InstallPackage(id string, interactive bool, force bool, scope stri
 		"--id", id,
 		"--accept-source-agreements",
 		"--accept-package-agreements",
+		"--verbose",
 	}
 
 	if interactive {
@@ -705,5 +734,169 @@ func (a *App) ImportApps(filePath string) (string, error) {
 		"--verbose",
 	}
 	return a.jobManager.StartJob("winget", args)
+}
+
+// OpenURLInDefaultBrowser opens any URL in the user's default Windows browser (via explorer/start)
+func (a *App) OpenURLInDefaultBrowser(targetURL string) error {
+	targetURL = strings.TrimSpace(targetURL)
+	if targetURL == "" {
+		return nil
+	}
+	if !strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://") && !strings.HasPrefix(targetURL, "mailto:") {
+		targetURL = "https://" + targetURL
+	}
+
+	// 1. Primary: Use Windows Shell explorer.exe / start
+	cmd := exec.Command("cmd.exe", "/c", "start", "", targetURL)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if err := cmd.Start(); err == nil {
+		return nil
+	}
+
+	// 2. Secondary: rundll32 url.dll,FileProtocolHandler
+	cmd2 := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", targetURL)
+	cmd2.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if err := cmd2.Start(); err == nil {
+		return nil
+	}
+
+	// 3. Fallback: Wails BrowserOpenURL runtime
+	if a.ctx != nil {
+		wailsRuntime.BrowserOpenURL(a.ctx, targetURL)
+	}
+	return nil
+}
+
+type gitHubReleaseAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
+
+type gitHubReleaseResponse struct {
+	TagName     string               `json:"tag_name"`
+	Name        string               `json:"name"`
+	Body        string               `json:"body"`
+	HTMLURL     string               `json:"html_url"`
+	PublishedAt string               `json:"published_at"`
+	Assets      []gitHubReleaseAsset `json:"assets"`
+}
+
+// CheckAppSelfUpdate queries GitHub releases to see if a newer version of EasyWinGet is available
+func (a *App) CheckAppSelfUpdate() (*models.AppUpdateInfo, error) {
+	currentVersion := a.GetAppVersion()
+	result := &models.AppUpdateInfo{
+		HasUpdate:      false,
+		CurrentVersion: currentVersion,
+	}
+
+	client := &http.Client{
+		Timeout: 7 * time.Second,
+	}
+
+	req, err := http.NewRequest("GET", "https://api.github.com/repos/DARKBOYJYOTI/EasyWinget/releases/latest", nil)
+	if err != nil {
+		return result, nil
+	}
+	req.Header.Set("User-Agent", "EasyWinGet-Desktop")
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return result, nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return result, nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return result, nil
+	}
+
+	var rel gitHubReleaseResponse
+	if err := json.Unmarshal(body, &rel); err != nil {
+		return result, nil
+	}
+
+	latestVersion := strings.TrimSpace(rel.TagName)
+	latestVersion = strings.TrimPrefix(latestVersion, "v")
+	latestVersion = strings.TrimPrefix(latestVersion, "V")
+
+	result.LatestVersion = latestVersion
+	result.ReleaseName = rel.Name
+	result.ReleaseNotes = rel.Body
+	result.ReleaseURL = rel.HTMLURL
+	result.PublishedAt = rel.PublishedAt
+
+	// Find suitable download URL from assets (installer preferred, then exe, then release URL)
+	downloadURL := rel.HTMLURL
+	for _, asset := range rel.Assets {
+		lowerName := strings.ToLower(asset.Name)
+		if strings.Contains(lowerName, "installer") && strings.HasSuffix(lowerName, ".exe") {
+			downloadURL = asset.BrowserDownloadURL
+			break
+		} else if strings.HasSuffix(lowerName, ".exe") && downloadURL == rel.HTMLURL {
+			downloadURL = asset.BrowserDownloadURL
+		}
+	}
+	result.DownloadURL = downloadURL
+
+	if isVersionNewer(latestVersion, currentVersion) {
+		result.HasUpdate = true
+	}
+
+	return result, nil
+}
+
+// isVersionNewer compares semver strings (e.g., "4.1.0" > "4.0.0")
+func isVersionNewer(latest, current string) bool {
+	cleanVer := func(v string) []int {
+		v = strings.TrimSpace(v)
+		v = strings.TrimPrefix(v, "v")
+		v = strings.TrimPrefix(v, "V")
+		if idx := strings.IndexAny(v, "-+"); idx != -1 {
+			v = v[:idx]
+		}
+		parts := strings.Split(v, ".")
+		nums := make([]int, len(parts))
+		for i, p := range parts {
+			n, _ := strconv.Atoi(p)
+			nums[i] = n
+		}
+		return nums
+	}
+
+	latestParts := cleanVer(latest)
+	currentParts := cleanVer(current)
+
+	maxLen := len(latestParts)
+	if len(currentParts) > maxLen {
+		maxLen = len(currentParts)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		l := 0
+		c := 0
+		if i < len(latestParts) {
+			l = latestParts[i]
+		}
+		if i < len(currentParts) {
+			c = currentParts[i]
+		}
+		if l > c {
+			return true
+		}
+		if l < c {
+			return false
+		}
+	}
+	return false
+}
+
+// IsPortableMode returns true if the application is running in portable mode
+func (a *App) IsPortableMode() bool {
+	return system.IsPortableMode()
 }
 

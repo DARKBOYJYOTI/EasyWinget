@@ -64,6 +64,8 @@
 
   onMount(async () => {
     checkMaximised();
+    setTimeout(checkMaximised, 100);
+    setTimeout(checkMaximised, 300);
     window.addEventListener('resize', checkMaximised);
 
     try {
@@ -100,7 +102,8 @@
   });
 </script>
 
-<div class="titlebar-drag-region" style="--wails-draggable: drag">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="titlebar-drag-region" style="--wails-draggable: drag" on:dblclick={handleToggleMaximise}>
   <div class="window-controls" style="--wails-draggable: none">
     <button class="win-btn win-minimize" title="Minimize" on:click={handleMinimise}>
       <svg width="10" height="1" viewBox="0 0 10 1">

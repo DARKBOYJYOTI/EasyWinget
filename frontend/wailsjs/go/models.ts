@@ -153,6 +153,32 @@ export namespace models {
 	        this.iconUrl = source["iconUrl"];
 	    }
 	}
+	export class AppUpdateInfo {
+	    hasUpdate: boolean;
+	    currentVersion: string;
+	    latestVersion: string;
+	    releaseName: string;
+	    releaseNotes: string;
+	    releaseUrl: string;
+	    downloadUrl: string;
+	    publishedAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AppUpdateInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hasUpdate = source["hasUpdate"];
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.releaseName = source["releaseName"];
+	        this.releaseNotes = source["releaseNotes"];
+	        this.releaseUrl = source["releaseUrl"];
+	        this.downloadUrl = source["downloadUrl"];
+	        this.publishedAt = source["publishedAt"];
+	    }
+	}
 
 }
 

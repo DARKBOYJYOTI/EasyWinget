@@ -18,32 +18,29 @@ Unicode true
 ## > makensis -DARG_WAILS_AMD64_BINARY=..\..\bin\app-amd64.exe -DARG_WAILS_ARM64_BINARY=..\..\bin\app-arm64.exe
 ####
 ## The following information is taken from the ProjectInfo file, but they can be overwritten here.
-####
-## !define INFO_PROJECTNAME    "MyProject" # Default "{{.Name}}"
-## !define INFO_COMPANYNAME    "MyCompany" # Default "{{.Info.CompanyName}}"
-## !define INFO_PRODUCTNAME    "MyProduct" # Default "{{.Info.ProductName}}"
-## !define INFO_PRODUCTVERSION "1.0.0"     # Default "{{.Info.ProductVersion}}"
-## !define INFO_COPYRIGHT      "Copyright" # Default "{{.Info.Copyright}}"
-###
-## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
-## !define UNINST_KEY_NAME     "UninstKeyInRegistry"  # Default "${INFO_COMPANYNAME}${INFO_PRODUCTNAME}"
-####
-## !define REQUEST_EXECUTION_LEVEL "admin"            # Default "admin"  see also https://nsis.sourceforge.io/Docs/Chapter4.html
-####
+!define INFO_PROJECTNAME    "EasyWinGet"
+!define INFO_COMPANYNAME    "DARKBOYJYOTI"
+!define INFO_PRODUCTNAME    "EasyWinGet"
+!define INFO_PRODUCTVERSION "4.0.0"
+!define INFO_COPYRIGHT      "Copyright © 2026 DARKBOYJYOTI"
+
+!define UNINST_KEY_NAME "EasyWinGet"
+BrandingText "EasyWinGet by DARKBOYJYOTI"
+
 ## Include the wails tools
-####
 !include "wails_tools.nsh"
 
 # The version information for this two must consist of 4 parts
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
 VIFileVersion    "${INFO_PRODUCTVERSION}.0"
 
-VIAddVersionKey "CompanyName"     "${INFO_COMPANYNAME}"
-VIAddVersionKey "FileDescription" "${INFO_PRODUCTNAME} Installer"
+VIAddVersionKey "CompanyName"     "DARKBOYJYOTI"
+VIAddVersionKey "FileDescription" "EasyWinGet Setup Installer by DARKBOYJYOTI"
 VIAddVersionKey "ProductVersion"  "${INFO_PRODUCTVERSION}"
 VIAddVersionKey "FileVersion"     "${INFO_PRODUCTVERSION}"
-VIAddVersionKey "LegalCopyright"  "${INFO_COPYRIGHT}"
-VIAddVersionKey "ProductName"     "${INFO_PRODUCTNAME}"
+VIAddVersionKey "LegalCopyright"  "Copyright © 2026 DARKBOYJYOTI"
+VIAddVersionKey "ProductName"     "EasyWinGet"
+VIAddVersionKey "Comments"        "Windows Package Manager UI by DARKBOYJYOTI"
 
 # Enable HiDPI support. https://nsis.sourceforge.io/Reference/ManifestDPIAware
 ManifestDPIAware true
@@ -60,6 +57,18 @@ ManifestDPIAware true
 # !insertmacro MUI_PAGE_LICENSE "resources\eula.txt" # Adds a EULA page to the installer
 !insertmacro MUI_PAGE_DIRECTORY # In which folder install page.
 !insertmacro MUI_PAGE_INSTFILES # Installing page.
+
+# Finish Page Checkboxes (Both checked by default)
+!define MUI_FINISHPAGE_RUN ""
+!define MUI_FINISHPAGE_RUN_TEXT "Launch ${INFO_PRODUCTNAME}"
+!define MUI_FINISHPAGE_RUN_FUNCTION LaunchAppFinish
+!define MUI_FINISHPAGE_RUN_CHECKED
+
+!define MUI_FINISHPAGE_SHOWREADME ""
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "Create Desktop Shortcut"
+!define MUI_FINISHPAGE_SHOWREADME_CHECKED
+!define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateDesktopShortcutFinish
+
 !insertmacro MUI_PAGE_FINISH # Finished installation page.
 
 !insertmacro MUI_UNPAGE_INSTFILES # Uinstalling page
@@ -76,15 +85,32 @@ OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the inst
   !if "${WAILS_INSTALL_SCOPE}" == "user"
     InstallDir "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
   !else
-    InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}"
+    InstallDir "$PROGRAMFILES64\${INFO_PRODUCTNAME}"
   !endif
 !else
-  InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}"
+  InstallDir "$PROGRAMFILES64\${INFO_PRODUCTNAME}"
 !endif # Default installing folder ($PROGRAMFILES is Program Files folder).
 ShowInstDetails show # This will always show the installation details.
 
 Function .onInit
    !insertmacro wails.checkArchitecture
+FunctionEnd
+
+Function LaunchAppFinish
+    # Launch as the standard interactive logged-in user (prevents high-integrity UIPI block)
+    Exec '"$WINDIR\explorer.exe" "$INSTDIR\${PRODUCT_EXECUTABLE}"'
+FunctionEnd
+
+Function CreateDesktopShortcutFinish
+    !insertmacro wails.setShellContext
+    SetOutPath $INSTDIR
+    CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "" "$INSTDIR\${PRODUCT_EXECUTABLE}" 0
+    ${If} ${REQUEST_EXECUTION_LEVEL} == "admin"
+        SetShellVarContext current
+        CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "" "$INSTDIR\${PRODUCT_EXECUTABLE}" 0
+        SetShellVarContext all
+    ${EndIf}
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 FunctionEnd
 
 Section
@@ -95,9 +121,25 @@ Section
     SetOutPath $INSTDIR
 
     !insertmacro wails.files
+    File "Pin-Taskbar.ps1"
 
-    CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
-    CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "" "$INSTDIR\${PRODUCT_EXECUTABLE}" 0
+    CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "" "$INSTDIR\${PRODUCT_EXECUTABLE}" 0
+    ${If} ${REQUEST_EXECUTION_LEVEL} == "admin"
+        SetShellVarContext current
+        CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "" "$INSTDIR\${PRODUCT_EXECUTABLE}" 0
+        SetShellVarContext all
+    ${EndIf}
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
+
+    # Pin to Windows 10/11 Taskbar by default
+    DetailPrint "Pinning ${INFO_PRODUCTNAME} to Taskbar..."
+    nsExec::Exec 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\Pin-Taskbar.ps1" -Pin "$INSTDIR\${PRODUCT_EXECUTABLE}" -Silent'
+
+    # Remove any old stray directories from previous versions
+    RMDir /r "$INSTDIR\app"
+    RMDir /r "$INSTDIR\data"
+    RMDir /r "$INSTDIR\jobs"
 
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
@@ -108,12 +150,27 @@ SectionEnd
 Section "uninstall"
     !insertmacro wails.setShellContext
 
+    # Unpin from Taskbar before removing files
+    DetailPrint "Unpinning ${INFO_PRODUCTNAME} from Taskbar..."
+    ${If} ${FileExists} "$INSTDIR\Pin-Taskbar.ps1"
+        nsExec::Exec 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\Pin-Taskbar.ps1" -Unpin "${INFO_PRODUCTNAME}*" -Silent'
+        Delete "$INSTDIR\Pin-Taskbar.ps1"
+    ${EndIf}
+
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
+    RMDir /r "$LOCALAPPDATA\${INFO_PRODUCTNAME}" # Remove application data and logs
 
     RMDir /r $INSTDIR
 
+    SetShellVarContext all
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
+
+    SetShellVarContext current
+    Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
+    Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
+
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols

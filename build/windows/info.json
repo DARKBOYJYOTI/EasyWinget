@@ -1,15 +1,24 @@
 {
 	"fixed": {
-		"file_version": "{{.Info.ProductVersion}}"
+		"file_version": "4.0.0.0",
+		"product_version": "4.0.0.0"
 	},
 	"info": {
+		"0409": {
+			"ProductVersion": "4.0.0",
+			"CompanyName": "DARKBOYJYOTI",
+			"FileDescription": "EasyWinGet - Windows Package Manager UI by DARKBOYJYOTI",
+			"LegalCopyright": "Copyright © 2026 DARKBOYJYOTI",
+			"ProductName": "EasyWinGet",
+			"Comments": "Modern Windows Package Manager UI created by DARKBOYJYOTI"
+		},
 		"0000": {
-			"ProductVersion": "{{.Info.ProductVersion}}",
-			"CompanyName": "{{.Info.CompanyName}}",
-			"FileDescription": "{{.Info.ProductName}}",
-			"LegalCopyright": "{{.Info.Copyright}}",
-			"ProductName": "{{.Info.ProductName}}",
-			"Comments": "{{.Info.Comments}}"
+			"ProductVersion": "4.0.0",
+			"CompanyName": "DARKBOYJYOTI",
+			"FileDescription": "EasyWinGet - Windows Package Manager UI by DARKBOYJYOTI",
+			"LegalCopyright": "Copyright © 2026 DARKBOYJYOTI",
+			"ProductName": "EasyWinGet",
+			"Comments": "Modern Windows Package Manager UI created by DARKBOYJYOTI"
 		}
 	}
 }

@@ -9,5 +9,12 @@
   "author": {
     "name": "DARKBOYJYOTI",
     "email": "KARMAKARJYOTI777@GMAIL.COM"
+  },
+  "info": {
+    "companyName": "DARKBOYJYOTI",
+    "productName": "EasyWinGet",
+    "productVersion": "4.0.0",
+    "copyright": "Copyright © 2026 DARKBOYJYOTI",
+    "comments": "Modern Windows Package Manager by DARKBOYJYOTI"
   }
 }

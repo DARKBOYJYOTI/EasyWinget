@@ -8,25 +8,44 @@
     Shield, 
     Tag, 
     Loader2,
-    Trash2
+    Trash2,
+    Clock
   } from '@lucide/svelte';
   import AppIcon from './AppIcon.svelte';
   import { 
     GetAppDetails, 
     InstallPackage, 
     DownloadPackage,
-    UninstallPackage
+    UninstallPackage,
+    OpenURLInDefaultBrowser
   } from '../../wailsjs/go/main/App.js';
+  import { BrowserOpenURL } from '../../wailsjs/runtime/runtime.js';
 
   export let packageId = '';
   export let installedIds = new Set();
   export let onClose = () => {};
-  export let onStartJob = (jobId, title) => {};
+  export let onStartJob = (jobId, title, options = {}) => {};
   export let onShowToast = (type, title, msg) => {};
   export let onConfirmRequest = async (opts) => true;
+  export let runningJobs = {};
+  export let isJobRunning = false;
+  export let onEnqueueJob = (item) => {};
 
   let details = null;
   let isLoading = true;
+
+  async function handleOpenUrl(url) {
+    if (!url) return;
+    try {
+      await OpenURLInDefaultBrowser(url);
+    } catch (e) {
+      try {
+        BrowserOpenURL(url);
+      } catch (err) {
+        if (typeof window !== 'undefined') window.open(url, '_blank');
+      }
+    }
+  }
 
   $: isInstalled = (() => {
     if (!installedIds || !(installedIds instanceof Set)) return false;
@@ -37,6 +56,8 @@
            (did && installedIds.has(did)) || 
            (dname && installedIds.has(dname));
   })();
+
+  $: pkgKey = (details?.id || packageId || '').toLowerCase();
 
   onMount(async () => {
     try {
@@ -50,10 +71,15 @@
 
   async function handleInstall(interactive = false) {
     if (!details) return;
+    if (isJobRunning) {
+      onEnqueueJob({ id: details.id, name: details.name || details.id, action: 'install', interactive });
+      onClose();
+      return;
+    }
     try {
       const mode = interactive ? 'Interactive' : 'Silent';
       const jobId = await InstallPackage(details.id, interactive, false, '');
-      onStartJob(jobId, `Installing ${details.name || details.id} (${mode})`);
+      onStartJob(jobId, `Installing ${details.name || details.id} (${mode})`, { packageId: details.id, action: 'install' });
       onClose();
     } catch (err) {
       onShowToast('error', 'Install Error', String(err));
@@ -75,7 +101,7 @@
 
     try {
       const jobId = await UninstallPackage(details.id || packageId, appName, false);
-      onStartJob(jobId, `Uninstalling ${appName}`);
+      onStartJob(jobId, `Uninstalling ${appName}`, { packageId: details.id || packageId, action: 'uninstall' });
       onShowToast('info', 'Uninstall Started', `Uninstalling ${appName}...`);
       onClose();
     } catch (err) {
@@ -85,9 +111,14 @@
 
   async function handleDownload() {
     if (!details) return;
+    if (isJobRunning) {
+      onEnqueueJob({ id: details.id, name: details.name || details.id, action: 'download' });
+      onClose();
+      return;
+    }
     try {
       const jobId = await DownloadPackage(details.id, details.name);
-      onStartJob(jobId, `Downloading ${details.name || details.id}`);
+      onStartJob(jobId, `Downloading ${details.name || details.id}`, { packageId: details.id, action: 'download' });
       onClose();
     } catch (err) {
       onShowToast('error', 'Download Error', String(err));
@@ -170,14 +201,24 @@
         {#if details.homepage || details.releaseNotesUrl}
           <div class="links-row">
             {#if details.homepage}
-              <a href={details.homepage} target="_blank" rel="noreferrer" class="ext-link">
+              <button 
+                type="button" 
+                class="ext-link" 
+                on:click={() => handleOpenUrl(details.homepage)}
+                title="Open {details.homepage} in your default browser"
+              >
                 <ExternalLink size={14} class="link-icon" /> Official Website
-              </a>
+              </button>
             {/if}
             {#if details.releaseNotesUrl}
-              <a href={details.releaseNotesUrl} target="_blank" rel="noreferrer" class="ext-link">
+              <button 
+                type="button" 
+                class="ext-link" 
+                on:click={() => handleOpenUrl(details.releaseNotesUrl)}
+                title="Open release notes in your default browser"
+              >
                 <FileText size={14} class="link-icon" /> Release Notes
-              </a>
+              </button>
             {/if}
           </div>
         {/if}
@@ -197,17 +238,50 @@
     </div>
 
     <div class="modal-footer">
-      <button class="btn-secondary" on:click={handleDownload} disabled={isLoading || !details}>
-        <Download size={15} /> Download
+      <button 
+        class="btn-secondary" 
+        class:btn-busy={runningJobs[pkgKey] === 'download'}
+        on:click={handleDownload} 
+        disabled={isLoading || !details || Boolean(runningJobs[pkgKey])}
+      >
+        {#if runningJobs[pkgKey] === 'download'}
+          <Loader2 size={15} class="animate-spin" /> Downloading...
+        {:else}
+          <Download size={15} /> Download
+        {/if}
       </button>
       {#if isInstalled}
-        <button class="btn-danger" on:click={handleUninstall} disabled={isLoading || !details}>
-          <Trash2 size={15} /> Uninstall
+        <button 
+          class="btn-danger" 
+          class:btn-busy={runningJobs[pkgKey] === 'uninstall'}
+          on:click={handleUninstall} 
+          disabled={isLoading || !details || Boolean(runningJobs[pkgKey])}
+        >
+          {#if runningJobs[pkgKey] === 'uninstall'}
+            <Loader2 size={15} class="animate-spin" /> Uninstalling...
+          {:else}
+            <Trash2 size={15} /> Uninstall
+          {/if}
         </button>
       {:else}
-        <button class="btn-primary" on:click={() => handleInstall(false)} disabled={isLoading || !details}>
-          Install
-        </button>
+        {#if runningJobs[pkgKey] === 'queued'}
+          <button class="btn-queued" disabled>
+            <Clock size={15} class="animate-pulse" /> Queued
+          </button>
+        {:else}
+          <button 
+            class="btn-primary" 
+            class:btn-busy={runningJobs[pkgKey] === 'install'}
+            on:click={() => handleInstall(false)} 
+            disabled={isLoading || !details || Boolean(runningJobs[pkgKey])}
+          >
+            {#if runningJobs[pkgKey] === 'install'}
+              <Loader2 size={15} class="animate-spin" /> Installing...
+            {:else}
+              Install
+            {/if}
+          </button>
+        {/if}
       {/if}
     </div>
   </div>
@@ -379,6 +453,8 @@
     text-decoration: none;
     font-size: 0.88rem;
     font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
     transition: all 0.2s cubic-bezier(0.1, 0.9, 0.2, 1);
   }
 
@@ -447,5 +523,21 @@
       opacity: 1;
       transform: scale(1) translateY(0);
     }
+  }
+
+  .btn-queued {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(245, 158, 11, 0.12) !important;
+    border: 1px solid rgba(245, 158, 11, 0.45) !important;
+    color: #f59e0b !important;
+    font-weight: 600;
+    font-size: 0.85rem;
+    height: 34px;
+    padding: 0 16px;
+    border-radius: var(--radius-sm);
+    cursor: not-allowed;
   }
 </style>

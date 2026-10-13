@@ -17,12 +17,15 @@
   export let onShowToast = (type, title, msg) => {};
   export let onJobDone = () => {};
 
-  let terminalOutput = '';
+  let terminalLines = [''];
+  let renderedOutput = '';
   let isDone = true;
   let exitCode = null;
   let terminalElement;
   let elapsedSeconds = 0;
   let timerInterval;
+
+  const defaultPrompt = 'EasyWinGet Interactive Terminal\nReady for input. Type any winget command (e.g. winget list, winget search) or shell command below:\n';
 
   // Smart Auto-Scroll: true by default; pauses if user scrolls up, resumes when user scrolls to bottom
   let isAutoScroll = true;
@@ -33,13 +36,131 @@
   let inputHistory = [];
   let historyIndex = -1;
 
+  function ansiToHtml(str) {
+    if (!str) return '';
+    // 1. Escape HTML
+    let escaped = str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // 2. Strip non-color ANSI codes (like cursor movement, clear line, etc.)
+    escaped = escaped.replace(/\x1b\[[0-9;?]*[A-HJKSTfhilmnsu]/g, (match) => {
+      if (match.endsWith('m')) return match;
+      return '';
+    });
+
+    // 3. Convert SGR color codes (\x1b[...m)
+    const colorMap = {
+      '0': '</span>',
+      '1': '<span style="font-weight:600">',
+      '2': '<span style="opacity:0.7">',
+      '30': '<span style="color:#6272a4">',
+      '31': '<span style="color:#ff5555">',
+      '32': '<span style="color:#50fa7b">',
+      '33': '<span style="color:#f1fa8c">',
+      '34': '<span style="color:#bd93f9">',
+      '35': '<span style="color:#ff79c6">',
+      '36': '<span style="color:#8be9fd">',
+      '37': '<span style="color:#f8f8f2">',
+      '90': '<span style="color:#6272a4">',
+      '91': '<span style="color:#ff6e6e">',
+      '92': '<span style="color:#69ff94">',
+      '93': '<span style="color:#ffffa5">',
+      '94': '<span style="color:#d6acff">',
+      '95': '<span style="color:#ff92df">',
+      '96': '<span style="color:#a4ffff">',
+      '97': '<span style="color:#ffffff">',
+    };
+
+    let openSpans = 0;
+    escaped = escaped.replace(/\x1b\[([0-9;]*)m/g, (_, codes) => {
+      if (!codes || codes === '0') {
+        const closing = '</span>'.repeat(openSpans);
+        openSpans = 0;
+        return closing;
+      }
+      let res = '';
+      for (const code of codes.split(';')) {
+        if (colorMap[code]) {
+          if (code === '0') {
+            res += '</span>'.repeat(openSpans);
+            openSpans = 0;
+          } else {
+            res += colorMap[code];
+            openSpans++;
+          }
+        }
+      }
+      return res;
+    });
+
+    escaped += '</span>'.repeat(openSpans);
+    return escaped;
+  }
+
+  function resetTerminal(initialText = '') {
+    terminalLines = [''];
+    if (initialText) {
+      appendChunk(initialText);
+    } else {
+      updateRendered();
+    }
+  }
+
+  function appendChunk(chunk) {
+    if (!chunk) return;
+    let lines = [...terminalLines];
+    let cur = lines[lines.length - 1];
+
+    for (let i = 0; i < chunk.length; i++) {
+      const ch = chunk[i];
+
+      if (ch === '\r') {
+        if (i + 1 < chunk.length && chunk[i + 1] === '\n') {
+          // CRLF
+          lines[lines.length - 1] = cur;
+          lines.push('');
+          cur = '';
+          i++; // skip \n
+        } else {
+          // Standalone \r: Carriage Return! Overwrite current line for in-place CLI animations & progress bars
+          lines[lines.length - 1] = cur;
+          cur = '';
+        }
+      } else if (ch === '\n') {
+        lines[lines.length - 1] = cur;
+        lines.push('');
+        cur = '';
+      } else if (ch === '\b') {
+        if (cur.length > 0) {
+          cur = cur.slice(0, -1);
+        }
+      } else {
+        cur += ch;
+      }
+    }
+
+    lines[lines.length - 1] = cur;
+
+    if (lines.length > 2500) {
+      lines = lines.slice(-2000);
+    }
+    terminalLines = lines;
+    updateRendered();
+  }
+
+  function updateRendered() {
+    renderedOutput = ansiToHtml(terminalLines.join('\n'));
+  }
+
   onMount(() => {
     // Listen for live job log streaming
     try {
       if (typeof window !== 'undefined' && window?.runtime?.EventsOn) {
         EventsOn('job:log', (data) => {
           if (activeJob && data && data.jobId === activeJob.id) {
-            terminalOutput += data.chunk;
+            appendChunk(data.chunk);
           }
         });
 
@@ -100,12 +221,13 @@
 
   async function initJob() {
     if (!activeJob) {
-      terminalOutput = 'EasyWinGet Interactive Terminal\nReady for input. Type any winget command (e.g. winget list, winget search) or shell command below:\n';
+      resetTerminal(defaultPrompt);
       isDone = true;
       return;
     }
     isDone = false;
     elapsedSeconds = 0;
+    resetTerminal();
     timerInterval = setInterval(() => {
       if (!isDone) elapsedSeconds++;
     }, 1000);
@@ -113,7 +235,7 @@
     try {
       const res = await GetJobStatus(activeJob.id);
       if (res && typeof res === 'object') {
-        terminalOutput = res.output || '';
+        resetTerminal(res.output || '');
         isDone = res.done;
         exitCode = res.exitCode;
         if (res.done) {
@@ -148,7 +270,7 @@
 
     // Handle screen clear
     if (text.toLowerCase() === 'cls' || text.toLowerCase() === 'clear') {
-      terminalOutput = '';
+      resetTerminal('');
       activeJob = null;
       isDone = true;
       exitCode = null;
@@ -158,18 +280,18 @@
     // 1. If an active job is running, pipe stdin to it
     if (activeJob && !isDone) {
       try {
-        terminalOutput += `\n> ${text}\n`;
+        appendChunk(`\n> ${text}\n`);
         await SendJobInput(activeJob.id, text + "\n");
         scrollToBottom();
       } catch (err) {
-        terminalOutput += `\n[Input Error]: ${err}\n`;
+        appendChunk(`\n[Input Error]: ${err}\n`);
       }
       return;
     }
 
     // 2. Otherwise execute as a new shell/winget command
     try {
-      terminalOutput += `\n> ${text}\n`;
+      appendChunk(`\n> ${text}\n`);
       isDone = false;
       exitCode = null;
       elapsedSeconds = 0;
@@ -182,7 +304,7 @@
       activeJob = { id: newJobId, title: text };
       scrollToBottom();
     } catch (err) {
-      terminalOutput += `\n[Command Error]: ${err}\n`;
+      appendChunk(`\n[Command Error]: ${err}\n`);
       isDone = true;
     }
   }
@@ -264,7 +386,7 @@
     bind:this={terminalElement}
     on:scroll={handleScroll}
   >
-    <pre class="terminal-content">{terminalOutput || (isDone ? 'EasyWinGet Interactive Terminal\nReady for input. Type any winget command or shell command below.\n' : 'Initializing process pipe and capturing output...')}<span class="cursor">_</span></pre>
+    <pre class="terminal-content">{@html renderedOutput || (isDone ? defaultPrompt : 'Initializing process pipe and capturing output...')}<span class="cursor">_</span></pre>
 
     <!-- Floating Jump-to-Bottom Pill when user scrolls up -->
     {#if isScrolledUp}

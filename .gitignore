@@ -32,8 +32,21 @@ desktop.ini
 *.swp
 *.swo
 
-# Local agent scratchpad
+# Local agent scratchpad & notes
 agent.md
+AGENTS.md
+*.agent.md
+
+# Code signing certificates & private keys
+*.pfx
+*.p12
+*.key
+*.pem
+build/windows/*.pfx
+build/windows/*.cer
+
+# Build tools (NSIS portable)
+tools/
 
 # Build/Dist
 dist/
@@ -49,7 +62,6 @@ test_cmd_c.js
 # Backup folder
 .bak/
 .bak
-
 
 # Scratchpad
 scratch/

@@ -28,6 +28,9 @@ var appIconPng []byte
 
 
 func main() {
+	// Enable cross-integrity communication so standard-user taskbar shortcut clicks can wake up an elevated instance
+	system.AllowUIPIMessages()
+
 	startHidden := false
 	initialTab := ""
 	for _, arg := range os.Args[1:] {
@@ -48,19 +51,21 @@ func main() {
 	// Create application with options
 	err := wails.Run(&options.App{
 		Title:             "EasyWinGet",
-		Width:             1180,
-		Height:            780,
-		MinWidth:          960,
-		MinHeight:         640,
+		Width:             1060,
+		Height:            640,
+		MinWidth:          880,
+		MinHeight:         520,
 		StartHidden:       startHidden,
 		HideWindowOnClose: true,
 		Frameless:         true,
+		WindowStartState:  options.Maximised,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 32, G: 32, B: 32, A: 0},
 		OnStartup: func(ctx context.Context) {
 			system.InitAppIcon(appIconPng)
+			system.CleanupProgramFilesJunk()
 			app.startup(ctx)
 			initTray(app, ctx)
 		},
@@ -88,7 +93,7 @@ func main() {
 			WebviewIsTransparent: true,
 			WindowIsTranslucent:  true,
 			BackdropType:         windows.Mica,
-			Theme:                windows.Dark,
+			Theme:                windows.SystemDefault,
 		},
 	})
 
@@ -111,23 +116,19 @@ func initTray(app *App, ctx context.Context) {
 			mQuit := systray.AddMenuItem("Exit EasyWinGet", "Quit application completely")
 
 			systray.SetOnClick(func(menu systray.IMenu) {
-				wailsRuntime.WindowShow(ctx)
-				wailsRuntime.WindowUnminimise(ctx)
+				app.RestoreWindow()
 			})
 
 			systray.SetOnDClick(func(menu systray.IMenu) {
-				wailsRuntime.WindowShow(ctx)
-				wailsRuntime.WindowUnminimise(ctx)
+				app.RestoreWindow()
 			})
 
 			mOpen.Click(func() {
-				wailsRuntime.WindowShow(ctx)
-				wailsRuntime.WindowUnminimise(ctx)
+				app.RestoreWindow()
 			})
 
 			mCheck.Click(func() {
-				wailsRuntime.WindowShow(ctx)
-				wailsRuntime.WindowUnminimise(ctx)
+				app.RestoreWindow()
 				app.CheckForUpdatesStartup()
 			})
 

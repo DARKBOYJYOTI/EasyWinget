@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"context"
 	"easywinget/backend/models"
-	"easywinget/backend/winget"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +40,14 @@ type Manager struct {
 	jobs       map[string]*Job
 	wailsCtx   context.Context
 	jobsLogDir string
+	onJobDone  func(models.JobDoneEvent)
+}
+
+// SetOnJobDone registers a callback invoked whenever any job completes
+func (m *Manager) SetOnJobDone(cb func(models.JobDoneEvent)) {
+	m.mu.Lock()
+	m.onJobDone = cb
+	m.mu.Unlock()
 }
 
 // NewManager creates a new Job Manager
@@ -106,6 +114,13 @@ func (m *Manager) StartJob(command string, args []string) (string, error) {
 		cmd = exec.Command(command, args...)
 	}
 
+	// Environment: Ensure UTF-8 and modern terminal support so winget & tools output full animations and colors
+	cmd.Env = append(os.Environ(),
+		"PYTHONIOENCODING=utf-8",
+		"WT_SESSION=1",
+		"TERM=xterm-256color",
+	)
+
 	// CREATE_NO_WINDOW (0x08000000) prevents console popup while allowing GUI installers to display
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: 0x08000000,
@@ -143,6 +158,10 @@ func (m *Manager) StartJob(command string, args []string) (string, error) {
 	go m.streamReader(job, stdoutPipe)
 	go m.streamReader(job, stderrPipe)
 
+	if isWinget {
+		go m.monitorWingetProgress(job)
+	}
+
 	// Wait for process in background
 	go func() {
 		err := cmd.Wait()
@@ -161,12 +180,21 @@ func (m *Manager) StartJob(command string, args []string) (string, error) {
 		job.CompletedAt = time.Now().UnixMilli()
 		job.mu.Unlock()
 
+		event := models.JobDoneEvent{
+			JobID:    jobID,
+			ExitCode: exitCode,
+			Success:  exitCode == 0,
+		}
+
 		if m.wailsCtx != nil {
-			wailsRuntime.EventsEmit(m.wailsCtx, "job:done", models.JobDoneEvent{
-				JobID:    jobID,
-				ExitCode: exitCode,
-				Success:  exitCode == 0,
-			})
+			wailsRuntime.EventsEmit(m.wailsCtx, "job:done", event)
+		}
+
+		m.mu.RLock()
+		cb := m.onJobDone
+		m.mu.RUnlock()
+		if cb != nil {
+			go cb(event)
 		}
 	}()
 
@@ -207,6 +235,11 @@ func (m *Manager) StartElevatedJob(command string, args []string) (string, error
 	}
 
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", psScript)
+	cmd.Env = append(os.Environ(),
+		"PYTHONIOENCODING=utf-8",
+		"WT_SESSION=1",
+		"TERM=xterm-256color",
+	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: 0x08000000,
 	}
@@ -250,12 +283,21 @@ func (m *Manager) StartElevatedJob(command string, args []string) (string, error
 		job.CompletedAt = time.Now().UnixMilli()
 		job.mu.Unlock()
 
+		event := models.JobDoneEvent{
+			JobID:    jobID,
+			ExitCode: exitCode,
+			Success:  exitCode == 0,
+		}
+
 		if m.wailsCtx != nil {
-			wailsRuntime.EventsEmit(m.wailsCtx, "job:done", models.JobDoneEvent{
-				JobID:    jobID,
-				ExitCode: exitCode,
-				Success:  exitCode == 0,
-			})
+			wailsRuntime.EventsEmit(m.wailsCtx, "job:done", event)
+		}
+
+		m.mu.RLock()
+		cb := m.onJobDone
+		m.mu.RUnlock()
+		if cb != nil {
+			go cb(event)
 		}
 	}()
 
@@ -263,30 +305,161 @@ func (m *Manager) StartElevatedJob(command string, args []string) (string, error
 }
 
 func (m *Manager) streamReader(j *Job, r io.Reader) {
-	reader := bufio.NewReader(r)
-	buf := make([]byte, 1024)
+	buf := make([]byte, 2048)
 
 	for {
-		n, err := reader.Read(buf)
+		n, err := r.Read(buf)
 		if n > 0 {
-			chunk := string(buf[:n])
-			cleanChunk := strings.Join(winget.CleanOutput(chunk), "\n")
-			if cleanChunk != "" {
-				cleanChunk += "\n"
-				j.mu.Lock()
-				j.Output.WriteString(cleanChunk)
-				j.mu.Unlock()
+			rawChunk := string(buf[:n])
+			j.mu.Lock()
+			j.Output.WriteString(rawChunk)
+			j.mu.Unlock()
 
-				if m.wailsCtx != nil {
-					wailsRuntime.EventsEmit(m.wailsCtx, "job:log", models.JobLogEvent{
-						JobID: j.ID,
-						Chunk: cleanChunk,
-					})
-				}
+			if m.wailsCtx != nil {
+				wailsRuntime.EventsEmit(m.wailsCtx, "job:log", models.JobLogEvent{
+					JobID: j.ID,
+					Chunk: rawChunk,
+				})
 			}
 		}
 		if err != nil {
 			break
+		}
+	}
+}
+
+// monitorWingetProgress watches the winget diagnostic output log for real-time Delivery Optimization progress
+func (m *Manager) monitorWingetProgress(j *Job) {
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		return
+	}
+	diagDir := filepath.Join(localAppData, "Packages", "Microsoft.DesktopAppInstaller_8wekyb3d8bbwe", "LocalState", "DiagOutputDir")
+	if _, err := os.Stat(diagDir); os.IsNotExist(err) {
+		return
+	}
+
+	searchThreshold := j.StartTime.Add(-2 * time.Second)
+	var logFile string
+
+	// Poll up to 4 seconds (40 x 100ms) to locate the WinGet log file created for this job
+	for i := 0; i < 40; i++ {
+		j.mu.RLock()
+		done := j.Done
+		j.mu.RUnlock()
+		if done {
+			return
+		}
+
+		entries, err := os.ReadDir(diagDir)
+		if err == nil {
+			var newestPath string
+			var newestTime time.Time
+			for _, e := range entries {
+				name := e.Name()
+				if strings.HasSuffix(name, ".log") && strings.HasPrefix(name, "WinGet-") {
+					info, err := e.Info()
+					if err == nil && info.ModTime().After(searchThreshold) {
+						if info.ModTime().After(newestTime) {
+							newestTime = info.ModTime()
+							newestPath = filepath.Join(diagDir, name)
+						}
+					}
+				}
+			}
+			if newestPath != "" {
+				logFile = newestPath
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if logFile == "" {
+		return
+	}
+
+	file, err := os.Open(logFile)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	reader := bufio.NewReader(file)
+	reDO := regexp.MustCompile(`DO State \d+,\s*(\d+)\s*/\s*(\d+)`)
+
+	var lastPct float64 = -1
+	var lastCurBytes int64 = 0
+	completedDownload := false
+
+	for {
+		j.mu.RLock()
+		done := j.Done
+		j.mu.RUnlock()
+		if done {
+			break
+		}
+
+		line, err := reader.ReadString('\n')
+		if len(line) > 0 {
+			match := reDO.FindStringSubmatch(line)
+			if len(match) == 3 {
+				cur, _ := strconv.ParseInt(match[1], 10, 64)
+				tot, _ := strconv.ParseInt(match[2], 10, 64)
+				if tot > 0 {
+					// Handle new download in multi-package jobs
+					if cur < lastCurBytes {
+						completedDownload = false
+						lastPct = -1
+					}
+					lastCurBytes = cur
+
+					pct := float64(cur) * 100.0 / float64(tot)
+					if pct > 100.0 {
+						pct = 100.0
+					}
+
+					// Update when percentage increments or reaches 100%
+					if pct != lastPct && (pct-lastPct >= 0.2 || pct == 100.0 || lastPct < 0) {
+						lastPct = pct
+						curMB := float64(cur) / (1024.0 * 1024.0)
+						totMB := float64(tot) / (1024.0 * 1024.0)
+
+						barWidth := 25
+						filled := int((pct / 100.0) * float64(barWidth))
+						if filled > barWidth {
+							filled = barWidth
+						}
+						empty := barWidth - filled
+						bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
+
+						var chunk string
+						if pct >= 100.0 && !completedDownload {
+							completedDownload = true
+							chunk = fmt.Sprintf("\r  [Download] [%s] 100.0%% (%.1f MB / %.1f MB) \x1b[32m✔ Verified\x1b[0m\n", bar, totMB, totMB)
+						} else if !completedDownload {
+							chunk = fmt.Sprintf("\r  [Download] [%s] %5.1f%% (%.1f MB / %.1f MB)", bar, pct, curMB, totMB)
+						}
+
+						if chunk != "" {
+							j.mu.Lock()
+							j.Output.WriteString(chunk)
+							j.mu.Unlock()
+
+							if m.wailsCtx != nil {
+								wailsRuntime.EventsEmit(m.wailsCtx, "job:log", models.JobLogEvent{
+									JobID: j.ID,
+									Chunk: chunk,
+								})
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if err != nil {
+			time.Sleep(80 * time.Millisecond)
 		}
 	}
 }
@@ -321,13 +494,23 @@ func (m *Manager) CancelJob(jobID string) bool {
 	job.Output.WriteString("\n[Process cancelled by user]\n")
 	job.mu.Unlock()
 
-	if m.wailsCtx != nil {
-		wailsRuntime.EventsEmit(m.wailsCtx, "job:done", models.JobDoneEvent{
-			JobID:    jobID,
-			ExitCode: -1,
-			Success:  false,
-		})
+	event := models.JobDoneEvent{
+		JobID:    jobID,
+		ExitCode: -1,
+		Success:  false,
 	}
+
+	if m.wailsCtx != nil {
+		wailsRuntime.EventsEmit(m.wailsCtx, "job:done", event)
+	}
+
+	m.mu.RLock()
+	cb := m.onJobDone
+	m.mu.RUnlock()
+	if cb != nil {
+		go cb(event)
+	}
+
 	return true
 }
 

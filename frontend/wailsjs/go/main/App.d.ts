@@ -6,6 +6,8 @@ export function ApplyAutoUpdateSettings():Promise<void>;
 
 export function CancelJob(arg1:string):Promise<boolean>;
 
+export function CheckAppSelfUpdate():Promise<models.AppUpdateInfo>;
+
 export function CheckForUpdatesStartup():Promise<void>;
 
 export function CheckInternetConnection():Promise<boolean>;
@@ -52,11 +54,17 @@ export function ImportApps(arg1:string):Promise<string>;
 
 export function InstallPackage(arg1:string,arg2:boolean,arg3:boolean,arg4:string):Promise<string>;
 
+export function IsPortableMode():Promise<boolean>;
+
 export function NavigateToTab(arg1:string):Promise<void>;
 
 export function OpenDownloadedFolder(arg1:string):Promise<void>;
 
 export function OpenDownloadsDirectory():Promise<void>;
+
+export function OpenURLInDefaultBrowser(arg1:string):Promise<void>;
+
+export function RefreshAll():Promise<void>;
 
 export function RestoreWindow():Promise<void>;
 

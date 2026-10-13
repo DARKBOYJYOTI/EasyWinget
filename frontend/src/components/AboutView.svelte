@@ -21,13 +21,22 @@
     Search,
     SlidersHorizontal
   } from '@lucide/svelte';
+  import { onMount } from 'svelte';
   import { BrowserOpenURL } from '../../wailsjs/runtime/runtime.js';
+  import { OpenURLInDefaultBrowser, IsPortableMode } from '../../wailsjs/go/main/App.js';
 
   export let version = '4.0.0';
   export let onShowToast = (type, title, msg) => {};
 
   let activeSection = 'guide'; // 'guide' | 'tos' | 'privacy' | 'diagnostics'
   let copiedDiagnostics = false;
+  let isPortable = false;
+
+  onMount(async () => {
+    try {
+      isPortable = await IsPortableMode();
+    } catch (e) {}
+  });
 
   const diagnosticsText = `Application: EasyWinGet Desktop
 Version: v${version} Native Desktop
@@ -49,11 +58,16 @@ Repository: https://github.com/DARKBOYJYOTI/EasyWinget`;
     }
   }
 
-  function openExternal(url) {
+  async function openExternal(url) {
+    if (!url) return;
     try {
-      BrowserOpenURL(url);
+      await OpenURLInDefaultBrowser(url);
     } catch (e) {
-      if (typeof window !== 'undefined') window.open(url, '_blank');
+      try {
+        BrowserOpenURL(url);
+      } catch (err) {
+        if (typeof window !== 'undefined') window.open(url, '_blank');
+      }
     }
   }
 </script>
@@ -72,7 +86,7 @@ Repository: https://github.com/DARKBOYJYOTI/EasyWinget`;
         <div class="hero-title-group">
           <div class="title-with-badge">
             <h1 class="app-brand-title">EasyWinGet</h1>
-            <span class="version-badge">v{version} Native Desktop</span>
+            <span class="version-badge">v{version} {isPortable ? 'Portable Edition' : 'Native Desktop'}</span>
           </div>
           <p class="app-tagline">Next-Generation Native Windows Package Management Hub</p>
         </div>

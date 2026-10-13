@@ -4,6 +4,29 @@
     <meta charset="UTF-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>EasyWinGet - Windows Package Manager</title>
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('easywinget_theme') || 'auto';
+          var isDark = false;
+          if (saved === 'dark') {
+            isDark = true;
+          } else if (saved === 'light') {
+            isDark = false;
+          } else {
+            isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          }
+          var effective = isDark ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', effective);
+
+          var savedColor = localStorage.getItem('easywinget_accent_color');
+          if (savedColor) {
+            document.documentElement.style.setProperty('--accent-primary', savedColor);
+            document.documentElement.style.setProperty('--accent-color', savedColor);
+          }
+        } catch (e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">

@@ -1,16 +1,19 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { Search, Download, Info, Plus, ChevronDown, ChevronUp, Sparkles, Globe, Check, X, Trash2 } from '@lucide/svelte';
+  import { Search, Download, Info, Plus, ChevronDown, ChevronUp, Sparkles, Globe, Check, X, Trash2, Loader2, Clock } from '@lucide/svelte';
   import AppIcon from './AppIcon.svelte';
   import SkeletonLoader from './SkeletonLoader.svelte';
   import { SearchApps, InstallPackage, DownloadPackage, UninstallPackage } from '../../wailsjs/go/main/App.js';
 
   export let onOpenDetails = (id) => {};
-  export let onStartJob = (jobId, title) => {};
+  export let onStartJob = (jobId, title, options = {}) => {};
   export let onShowToast = (type, title, msg) => {};
   export let onConfirmRequest = async (opts) => true;
   export let onUpdateCount = (count) => {};
   export let installedIds = new Set();
+  export let runningJobs = {};
+  export let isJobRunning = false;
+  export let onEnqueueJob = (item) => {};
 
   function isInstalled(pkg) {
     if (!pkg || !installedIds) return false;
@@ -187,9 +190,13 @@
   }
 
   async function handleInstall(pkg, interactive = false) {
+    if (isJobRunning) {
+      onEnqueueJob({ id: pkg.id, name: pkg.name, action: 'install', interactive });
+      return;
+    }
     try {
       const jobId = await InstallPackage(pkg.id, interactive, false, '');
-      onStartJob(jobId, `Installing ${pkg.name}`);
+      onStartJob(jobId, `Installing ${pkg.name}`, { packageId: pkg.id, action: 'install' });
       onShowToast('info', 'Installation Started', `Installing ${pkg.name}...`);
     } catch (err) {
       onShowToast('error', 'Install Error', String(err));
@@ -209,7 +216,7 @@
 
     try {
       const jobId = await UninstallPackage(pkg.id, pkg.name, false);
-      onStartJob(jobId, `Uninstalling ${pkg.name}`);
+      onStartJob(jobId, `Uninstalling ${pkg.name}`, { packageId: pkg.id, action: 'uninstall' });
       onShowToast('info', 'Uninstall Started', `Uninstalling ${pkg.name}...`);
     } catch (err) {
       onShowToast('error', 'Uninstall Failed', String(err));
@@ -217,9 +224,13 @@
   }
 
   async function handleDownload(pkg) {
+    if (isJobRunning) {
+      onEnqueueJob({ id: pkg.id, name: pkg.name, action: 'download' });
+      return;
+    }
     try {
       const jobId = await DownloadPackage(pkg.id, pkg.name);
-      onStartJob(jobId, `Downloading ${pkg.name}`);
+      onStartJob(jobId, `Downloading ${pkg.name}`, { packageId: pkg.id, action: 'download' });
       onShowToast('info', 'Download Started', `Downloading installer for ${pkg.name}...`);
     } catch (err) {
       onShowToast('error', 'Download Error', String(err));
@@ -297,7 +308,8 @@
         <span>Found {searchResults.length} packages for "{searchQuery}"</span>
       </div>
       <div class="results-grid">
-        {#each searchResults as pkg (pkg.id)}
+        {#each searchResults as pkg, index (pkg.id ? `${pkg.id}__${index}` : `pkg__${index}`)}
+          {@const pkgKey = (pkg.id || '').toLowerCase()}
           <div class="app-card">
             <div class="app-card-header">
               <AppIcon packageId={pkg.id} name={pkg.name} size={46} />
@@ -312,7 +324,22 @@
             </div>
 
             <div class="app-card-actions">
-              {#if isInstalled(pkg)}
+              {#if runningJobs[pkgKey] === 'install'}
+                <button class="btn-primary btn-install flex-1 btn-busy" disabled>
+                  <Loader2 size={14} class="animate-spin" />
+                  <span>Installing...</span>
+                </button>
+              {:else if runningJobs[pkgKey] === 'queued'}
+                <button class="btn-queued flex-1" title="Waiting in installation queue..." disabled>
+                  <Clock size={14} class="animate-pulse" />
+                  <span>Queued</span>
+                </button>
+              {:else if runningJobs[pkgKey] === 'uninstall'}
+                <button class="btn-danger flex-1 btn-busy" disabled>
+                  <Loader2 size={14} class="animate-spin" />
+                  <span>Uninstalling...</span>
+                </button>
+              {:else if isInstalled(pkg)}
                 <button class="btn-installed flex-1" title="Already installed - Click to view info" on:click={() => onOpenDetails(pkg.id)}>
                   <Check size={14} class="installed-check" />
                   <span>Installed</span>
@@ -322,8 +349,19 @@
                   <span>Install</span>
                 </button>
               {/if}
-              <button class="btn-secondary btn-action" title="Download Installer" on:click={() => handleDownload(pkg)}>
-                <Download size={14} />
+              <button 
+                class="btn-secondary btn-action" 
+                title={runningJobs[pkgKey] === 'queued' ? 'Queued' : 'Download Installer'} 
+                on:click={() => handleDownload(pkg)}
+                disabled={runningJobs[pkgKey] === 'download' || runningJobs[pkgKey] === 'queued'}
+              >
+                {#if runningJobs[pkgKey] === 'download'}
+                  <Loader2 size={14} class="animate-spin" />
+                {:else if runningJobs[pkgKey] === 'queued'}
+                  <Clock size={14} class="animate-pulse" />
+                {:else}
+                  <Download size={14} />
+                {/if}
               </button>
               <button class="btn-secondary btn-action" title="View Manifest Details" on:click={() => onOpenDetails(pkg.id)}>
                 <Info size={14} />
@@ -363,7 +401,8 @@
         <div class="popular-grid-wrapper">
           {#key activePopularTab}
             <div class="results-grid popular-results-grid">
-              {#each displayedPopular as pkg, i (pkg.id)}
+              {#each displayedPopular as pkg, i (pkg.id ? `${pkg.id}__${i}` : `pop__${i}`)}
+                {@const pkgKey = (pkg.id || '').toLowerCase()}
                 <div 
                   class="app-card popular-card-animated"
                   style="--card-delay: {i * 40}ms;"
@@ -381,7 +420,22 @@
                   </div>
 
                   <div class="app-card-actions">
-                    {#if isInstalled(pkg)}
+                    {#if runningJobs[pkgKey] === 'install'}
+                      <button class="btn-primary btn-install flex-1 btn-busy" disabled>
+                        <Loader2 size={14} class="animate-spin" />
+                        <span>Installing...</span>
+                      </button>
+                    {:else if runningJobs[pkgKey] === 'queued'}
+                      <button class="btn-queued flex-1" title="Waiting in installation queue..." disabled>
+                        <Clock size={14} class="animate-pulse" />
+                        <span>Queued</span>
+                      </button>
+                    {:else if runningJobs[pkgKey] === 'uninstall'}
+                      <button class="btn-danger flex-1 btn-busy" disabled>
+                        <Loader2 size={14} class="animate-spin" />
+                        <span>Uninstalling...</span>
+                      </button>
+                    {:else if isInstalled(pkg)}
                       <button class="btn-installed flex-1" title="Already installed - Click to view info" on:click={() => onOpenDetails(pkg.id)}>
                         <Check size={14} class="installed-check" />
                         <span>Installed</span>
@@ -391,8 +445,19 @@
                         <span>Install</span>
                       </button>
                     {/if}
-                    <button class="btn-secondary btn-action" title="Download Installer" on:click={() => handleDownload(pkg)}>
-                      <Download size={14} />
+                    <button 
+                      class="btn-secondary btn-action" 
+                      title={runningJobs[pkgKey] === 'queued' ? 'Queued' : 'Download Installer'} 
+                      on:click={() => handleDownload(pkg)}
+                      disabled={runningJobs[pkgKey] === 'download' || runningJobs[pkgKey] === 'queued'}
+                    >
+                      {#if runningJobs[pkgKey] === 'download'}
+                        <Loader2 size={14} class="animate-spin" />
+                      {:else if runningJobs[pkgKey] === 'queued'}
+                        <Clock size={14} class="animate-pulse" />
+                      {:else}
+                        <Download size={14} />
+                      {/if}
                     </button>
                     <button class="btn-secondary btn-action" title="View Details" on:click={() => onOpenDetails(pkg.id)}>
                       <Info size={14} />
@@ -859,5 +924,21 @@
 
   .flex-1 {
     flex: 1;
+  }
+
+  .btn-queued {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(245, 158, 11, 0.12) !important;
+    border: 1px solid rgba(245, 158, 11, 0.45) !important;
+    color: #f59e0b !important;
+    font-weight: 600;
+    font-size: 0.84rem;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: var(--radius-sm);
+    cursor: not-allowed;
   }
 </style>

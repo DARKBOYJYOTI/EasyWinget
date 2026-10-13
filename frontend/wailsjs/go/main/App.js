@@ -10,6 +10,10 @@ export function CancelJob(arg1) {
   return window['go']['main']['App']['CancelJob'](arg1);
 }
 
+export function CheckAppSelfUpdate() {
+  return window['go']['main']['App']['CheckAppSelfUpdate']();
+}
+
 export function CheckForUpdatesStartup() {
   return window['go']['main']['App']['CheckForUpdatesStartup']();
 }
@@ -102,6 +106,10 @@ export function InstallPackage(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['InstallPackage'](arg1, arg2, arg3, arg4);
 }
 
+export function IsPortableMode() {
+  return window['go']['main']['App']['IsPortableMode']();
+}
+
 export function NavigateToTab(arg1) {
   return window['go']['main']['App']['NavigateToTab'](arg1);
 }
@@ -112,6 +120,14 @@ export function OpenDownloadedFolder(arg1) {
 
 export function OpenDownloadsDirectory() {
   return window['go']['main']['App']['OpenDownloadsDirectory']();
+}
+
+export function OpenURLInDefaultBrowser(arg1) {
+  return window['go']['main']['App']['OpenURLInDefaultBrowser'](arg1);
+}
+
+export function RefreshAll() {
+  return window['go']['main']['App']['RefreshAll']();
 }
 
 export function RestoreWindow() {

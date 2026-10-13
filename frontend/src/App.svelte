@@ -10,6 +10,7 @@
   import SettingsModal from './components/SettingsModal.svelte';
   import AboutView from './components/AboutView.svelte';
   import ConfirmModal from './components/ConfirmModal.svelte';
+  import AppUpdateModal from './components/AppUpdateModal.svelte';
   import Toast from './components/Toast.svelte';
   import TitleBar from './components/TitleBar.svelte';
 
@@ -23,29 +24,69 @@
     GetSetting,
     SetSetting,
     GetWindowsTransparencyEnabled,
-    GetInitialTab
+    GetInitialTab,
+    RefreshAll,
+    OpenURLInDefaultBrowser,
+    InstallPackage,
+    DownloadPackage,
+    UninstallPackage,
+    CheckAppSelfUpdate
   } from '../wailsjs/go/main/App.js';
   import { EventsOn } from '../wailsjs/runtime/runtime.js';
-  import { Terminal, X } from '@lucide/svelte';
+  import { Terminal, X, Clock } from '@lucide/svelte';
   import { applyAccentToDocument } from './utils/theme.js';
 
   let activeTab = 'search';
+  let previousTab = 'search';
+  let lastNonTerminalTab = 'search';
+
+  $: if (activeTab !== 'terminal') {
+    lastNonTerminalTab = activeTab;
+  }
+
   let installedCount = 0;
   let updatesCount = 0;
   let downloadsCount = 0;
   let searchCount = null;
-  let appVersion = '4.0.0';
-  let themePreference = 'dark'; // 'dark' | 'light' | 'auto'
-  let currentTheme = 'dark';    // rendered theme 'dark' | 'light'
+  function getSystemTheme() {
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'dark';
+  }
+
+  function getInitialTheme() {
+    let pref = 'auto';
+    if (typeof localStorage !== 'undefined') {
+      pref = localStorage.getItem('easywinget_theme') || 'auto';
+    }
+    const current = pref === 'auto' ? getSystemTheme() : pref;
+    return { pref, current };
+  }
+
+  const initialTheme = getInitialTheme();
+  let themePreference = initialTheme.pref; // 'auto' | 'dark' | 'light'
+  let currentTheme = initialTheme.current; // 'light' if OS is light, 'dark' if dark
   let accentColor = '#0078d4';
   let accentSource = 'default'; // 'default' or 'windows'
+  if (typeof localStorage !== 'undefined') {
+    accentColor = localStorage.getItem('easywinget_accent_color') || '#0078d4';
+    accentSource = localStorage.getItem('easywinget_accent_source') || 'default';
+  }
 
   let installedIds = new Set();
+  let appVersion = '4.0.0';
 
-  let activeJob = null; // { id, title }
+  let activeJob = null; // { id, title, packageId, action }
   let isJobRunning = false;
+  let runningJobs = {}; // { [packageId: string]: 'install' | 'upgrade' | 'uninstall' | 'download' | 'queued' }
+  let jobQueue = []; // [{ id, name, action, interactive }]
   let selectedPackageId = null;
   let toasts = [];
+
+  // EasyWinGet App Self-Update State
+  let showAppUpdateModal = false;
+  let appUpdateInfo = null;
 
   // Global Fluent Confirm Modal State
   let confirmState = {
@@ -80,13 +121,6 @@
         }
       };
     });
-  }
-
-  function getSystemTheme() {
-    if (typeof window !== 'undefined' && window.matchMedia) {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    return 'dark';
   }
 
   function updateInstalledSet(apps) {
@@ -127,32 +161,35 @@
       });
     }
 
-    // 2. Load saved theme from SQLite database (permanent persistence), fallback to localStorage
+    // 2. Load saved theme from localStorage first (0ms), then verify with SQLite
     try {
       let savedTheme = '';
-      try {
-        savedTheme = await GetSetting('easywinget_theme', '');
-      } catch (e) {}
-      if (!savedTheme && typeof localStorage !== 'undefined') {
+      if (typeof localStorage !== 'undefined') {
         savedTheme = localStorage.getItem('easywinget_theme') || '';
       }
-      applyTheme(savedTheme || 'dark');
+      if (!savedTheme) {
+        try {
+          savedTheme = await GetSetting('easywinget_theme', '');
+        } catch (e) {}
+      }
+      applyTheme(savedTheme || 'auto');
     } catch (e) {
-      applyTheme('dark');
+      applyTheme('auto');
     }
 
     // 3. Load saved accent source & color from SQLite database
     try {
       let savedSource = '';
       let savedColor = '';
-      try {
-        savedSource = await GetSetting('easywinget_accent_source', '');
-        savedColor = await GetSetting('easywinget_accent_color', '');
-      } catch (e) {}
-
-      if (!savedSource && typeof localStorage !== 'undefined') {
+      if (typeof localStorage !== 'undefined') {
         savedSource = localStorage.getItem('easywinget_accent_source') || '';
         savedColor = localStorage.getItem('easywinget_accent_color') || '';
+      }
+      if (!savedSource) {
+        try {
+          savedSource = await GetSetting('easywinget_accent_source', '');
+          savedColor = await GetSetting('easywinget_accent_color', '');
+        } catch (e) {}
       }
 
       savedSource = savedSource || 'default';
@@ -170,7 +207,8 @@
 
     // 4. Get Version
     try {
-      appVersion = await GetAppVersion();
+      const v = await GetAppVersion();
+      if (v) appVersion = v;
     } catch (e) {}
 
     // 5. Instant initial counts & installed mapping from SQLite (< 2ms)
@@ -213,6 +251,22 @@
       window.addEventListener('easywinget:window-shown', updateWindowHiddenState);
     }
 
+    // Global link interceptor: open any external http/https link in default Windows browser (via explorer.exe / shell)
+    const handleGlobalLinkClick = (e) => {
+      const link = e.target && e.target.closest ? e.target.closest('a') : null;
+      if (link && link.href) {
+        const href = link.href;
+        if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:')) {
+          e.preventDefault();
+          e.stopPropagation();
+          OpenURLInDefaultBrowser(href);
+        }
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('click', handleGlobalLinkClick, true);
+    }
+
     // 6. Global Wails Events
     try {
       // Direct navigation to tab event (e.g. from protocol activation or Windows Toast click)
@@ -243,14 +297,133 @@
         }
       });
 
-      // Job completion tracker
-      EventsOn('job:done', (data) => {
+      // Job completion tracker with instant optimistic UI update, background sync, and queue runner
+      EventsOn('job:done', async (data) => {
+        const finishedJob = activeJob;
         isJobRunning = false;
+
+        if (data && data.success && finishedJob) {
+          const pkgId = finishedJob.packageId ? finishedJob.packageId.toLowerCase() : null;
+          const action = finishedJob.action;
+
+          // 1. Instant optimistic update for installed set and badge counts
+          if (action === 'install' && pkgId) {
+            installedIds = new Set([...installedIds, pkgId]);
+            installedCount += 1;
+          } else if (action === 'uninstall' && pkgId) {
+            const next = new Set(installedIds);
+            next.delete(pkgId);
+            installedIds = next;
+            if (installedCount > 0) installedCount -= 1;
+          } else if (action === 'upgrade') {
+            if (pkgId === 'all') {
+              updatesCount = 0;
+            } else if (updatesCount > 0) {
+              updatesCount -= 1;
+            }
+          }
+
+          // 2. Trigger automatic background rescan
+          try {
+            await RefreshAll();
+          } catch (e) {
+            console.warn('Auto-refresh failed:', e);
+          }
+        }
+
+        // Clean up completed package from runningJobs
+        if (finishedJob && finishedJob.packageId) {
+          const finishedKey = finishedJob.packageId.toLowerCase();
+          const nextRunning = { ...runningJobs };
+          delete nextRunning[finishedKey];
+          runningJobs = nextRunning;
+        }
+
+        // 3. Process next item from installation queue if any!
+        if (jobQueue.length > 0) {
+          const nextJob = jobQueue[0];
+          jobQueue = jobQueue.slice(1);
+
+          showToast('info', 'Next Install Starting', `Starting installation of ${nextJob.name}...`);
+
+          // Safe 600ms delay to ensure Windows Installer (msiexec.exe) releases its mutex
+          setTimeout(async () => {
+            try {
+              let nextJobId = '';
+              if (nextJob.action === 'install') {
+                nextJobId = await InstallPackage(nextJob.id, nextJob.interactive || false, false, '');
+              } else if (nextJob.action === 'download') {
+                nextJobId = await DownloadPackage(nextJob.id, nextJob.name);
+              } else if (nextJob.action === 'uninstall') {
+                nextJobId = await UninstallPackage(nextJob.id, nextJob.name, false);
+              }
+
+              if (nextJobId) {
+                handleStartJob(nextJobId, `${nextJob.action === 'download' ? 'Downloading' : 'Installing'} ${nextJob.name}`, {
+                  packageId: nextJob.id,
+                  action: nextJob.action
+                });
+              }
+            } catch (err) {
+              showToast('error', 'Queued Task Failed', `Failed to start ${nextJob.name}: ${err}`);
+              const k = (nextJob.id || '').toLowerCase();
+              const nextRunning = { ...runningJobs };
+              delete nextRunning[k];
+              runningJobs = nextRunning;
+            }
+          }, 600);
+        } else {
+          runningJobs = {};
+        }
       });
+      // 7. Check EasyWinGet Self-Update with 24-Hour Remind-Later Throttling
+      setTimeout(checkStartupAppUpdate, 1500);
     } catch (e) {
       console.warn('EventsOn error:', e);
     }
   });
+
+  async function checkStartupAppUpdate() {
+    try {
+      // 24-Hour Throttling: If user clicked "Remind me later", skip prompt for 24h
+      const remindedAtStr = await GetSetting('easywinget_app_update_reminded_at', '0');
+      const remindedAt = Number(remindedAtStr) || 0;
+      const now = Date.now();
+      const oneDayMs = 24 * 60 * 60 * 1000; // 24 hours
+
+      if (remindedAt > 0 && (now - remindedAt) < oneDayMs) {
+        return;
+      }
+
+      const info = await CheckAppSelfUpdate();
+      if (info && info.hasUpdate) {
+        appUpdateInfo = info;
+        showAppUpdateModal = true;
+      }
+    } catch (err) {
+      console.warn('Startup app update check failed:', err);
+    }
+  }
+
+  async function handleAppUpdateNow() {
+    if (appUpdateInfo) {
+      const targetUrl = appUpdateInfo.downloadUrl || appUpdateInfo.releaseUrl || 'https://github.com/DARKBOYJYOTI/EasyWinget/releases/latest';
+      await OpenURLInDefaultBrowser(targetUrl);
+    }
+    showAppUpdateModal = false;
+  }
+
+  async function handleAppRemindLater() {
+    try {
+      await SetSetting('easywinget_app_update_reminded_at', Date.now().toString());
+    } catch (e) {}
+    showAppUpdateModal = false;
+    showToast('info', 'Update Postponed', 'We will remind you again tomorrow.');
+  }
+
+  function handleCloseAppUpdate() {
+    handleAppRemindLater();
+  }
 
   function applyTheme(preference) {
     themePreference = preference;
@@ -310,10 +483,35 @@
     toasts = toasts.filter(t => t.id !== id);
   }
 
-  function handleStartJob(jobId, title) {
-    activeJob = { id: jobId, title };
+  function handleStartJob(jobId, title, options = {}) {
+    previousTab = lastNonTerminalTab;
+    const pkgId = options.packageId ? options.packageId.toLowerCase() : null;
+    let action = options.action;
+    if (!action) {
+      const lower = title.toLowerCase();
+      if (lower.includes('upgrad') || lower.includes('update')) action = 'upgrade';
+      else if (lower.includes('uninstal')) action = 'uninstall';
+      else if (lower.includes('download')) action = 'download';
+      else action = 'install';
+    }
+
+    activeJob = { id: jobId, title, packageId: pkgId, action };
     isJobRunning = true;
+    if (pkgId) {
+      runningJobs = { ...runningJobs, [pkgId]: action };
+    }
     activeTab = 'terminal';
+  }
+
+  function enqueueJob(item) {
+    const pkgKey = (item.id || '').toLowerCase();
+    if (runningJobs[pkgKey]) {
+      showToast('warning', 'Already in Progress', `${item.name} is already ${runningJobs[pkgKey]}ing.`);
+      return;
+    }
+    runningJobs = { ...runningJobs, [pkgKey]: 'queued' };
+    jobQueue = [...jobQueue, item];
+    showToast('info', 'Added to Queue', `${item.name} added to installation queue (#${jobQueue.length})`);
   }
 
   function openDetails(id) {
@@ -338,49 +536,57 @@
   />
 
   <main class="main-content">
-    {#if activeTab === 'search'}
-      <div class="view-animated">
-        <SearchView 
-          {installedIds}
-          onOpenDetails={openDetails}
-          onStartJob={handleStartJob}
-          onShowToast={showToast}
-          onConfirmRequest={requestConfirm}
-          onUpdateCount={(c) => searchCount = c}
-        />
-      </div>
-    {:else if activeTab === 'installed'}
-      <div class="view-animated">
-        <InstalledView 
-          onStartJob={handleStartJob}
-          onShowToast={showToast}
-          onUpdateCount={(c) => installedCount = c}
-          onConfirmRequest={requestConfirm}
-        />
-      </div>
-    {:else if activeTab === 'updates'}
-      <div class="view-animated">
-        <UpdatesView 
-          onStartJob={handleStartJob}
-          onShowToast={showToast}
-          onUpdateCount={(c) => updatesCount = c}
-        />
-      </div>
-    {:else if activeTab === 'downloads'}
-      <div class="view-animated">
-        <DownloadsView 
-          onStartJob={handleStartJob}
-          onShowToast={showToast}
-          onUpdateCount={(c) => downloadsCount = c}
-        />
-      </div>
-    {:else if activeTab === 'terminal'}
+    <div class="view-panel" class:hidden={activeTab !== 'search'}>
+      <SearchView 
+        {installedIds}
+        {runningJobs}
+        {isJobRunning}
+        onEnqueueJob={enqueueJob}
+        onOpenDetails={openDetails}
+        onStartJob={handleStartJob}
+        onShowToast={showToast}
+        onConfirmRequest={requestConfirm}
+        onUpdateCount={(c) => searchCount = c}
+      />
+    </div>
+
+    <div class="view-panel" class:hidden={activeTab !== 'installed'}>
+      <InstalledView 
+        {runningJobs}
+        onStartJob={handleStartJob}
+        onShowToast={showToast}
+        onUpdateCount={(c) => installedCount = c}
+        onConfirmRequest={requestConfirm}
+      />
+    </div>
+
+    <div class="view-panel" class:hidden={activeTab !== 'updates'}>
+      <UpdatesView 
+        {runningJobs}
+        onStartJob={handleStartJob}
+        onShowToast={showToast}
+        onUpdateCount={(c) => updatesCount = c}
+      />
+    </div>
+
+    <div class="view-panel" class:hidden={activeTab !== 'downloads'}>
+      <DownloadsView 
+        onStartJob={handleStartJob}
+        onShowToast={showToast}
+        onUpdateCount={(c) => downloadsCount = c}
+      />
+    </div>
+
+    {#if activeTab === 'terminal'}
       <div class="terminal-tab-wrapper view-animated">
         <TaskTerminal 
           {activeJob}
-          onClose={() => activeTab = 'search'}
+          onClose={() => { activeTab = previousTab || lastNonTerminalTab || 'search'; }}
           onShowToast={showToast}
-          onJobDone={() => isJobRunning = false}
+          onJobDone={() => {
+            isJobRunning = false;
+            runningJobs = {};
+          }}
         />
       </div>
     {:else if activeTab === 'settings'}
@@ -411,15 +617,18 @@
 
     <!-- Bottom Docked Task Bar when browsing another tab while a job is running -->
     {#if isJobRunning && activeTab !== 'terminal'}
-      <div class="docked-taskbar" on:click={() => activeTab = 'terminal'}>
+      <div class="docked-taskbar" on:click={() => { previousTab = activeTab; activeTab = 'terminal'; }}>
         <div class="docked-pulse"></div>
         <Terminal size={15} color="var(--accent-light)" />
         <span class="docked-title">{activeJob?.title || 'Background Task'}</span>
+        {#if jobQueue.length > 0}
+          <span class="docked-queue-badge">+{jobQueue.length} in queue</span>
+        {/if}
         <button class="btn-primary docked-btn">View Console</button>
         <button 
           class="docked-close" 
           title="Dismiss status bar" 
-          on:click={(e) => { e.stopPropagation(); isJobRunning = false; }}
+          on:click={(e) => { e.stopPropagation(); isJobRunning = false; runningJobs = {}; }}
         >
           <X size={14} />
         </button>
@@ -432,6 +641,9 @@
     <DetailsModal 
       packageId={selectedPackageId}
       {installedIds}
+      {runningJobs}
+      {isJobRunning}
+      onEnqueueJob={enqueueJob}
       onClose={closeDetails}
       onStartJob={handleStartJob}
       onShowToast={showToast}
@@ -451,6 +663,16 @@
     onConfirm={confirmState.onConfirm}
     onCancel={confirmState.onCancel}
   />
+
+  <!-- EasyWinGet App Self-Update Modal -->
+  {#if showAppUpdateModal && appUpdateInfo}
+    <AppUpdateModal 
+      updateInfo={appUpdateInfo}
+      onUpdateNow={handleAppUpdateNow}
+      onRemindLater={handleAppRemindLater}
+      onClose={handleCloseAppUpdate}
+    />
+  {/if}
 
   <!-- Toast Container with Sound Synthesizer -->
   <Toast 
@@ -481,6 +703,15 @@
     background: var(--bg-app);
     padding-top: 38px; /* Clean clearance below custom Windows 11 title bar */
     box-sizing: border-box;
+  }
+
+  .view-panel {
+    height: 100%;
+    width: 100%;
+  }
+
+  .view-panel.hidden {
+    display: none !important;
   }
 
   .terminal-tab-wrapper {
@@ -526,6 +757,17 @@
     font-weight: 500;
     color: var(--text-primary);
     flex: 1;
+  }
+
+  .docked-queue-badge {
+    background: rgba(245, 158, 11, 0.18);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    color: #f59e0b;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    white-space: nowrap;
   }
 
   .docked-btn {

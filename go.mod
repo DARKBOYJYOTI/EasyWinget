@@ -44,5 +44,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
-
-// replace github.com/wailsapp/wails/v2 v2.15.0 => C:\Users\darkboyjyoti\go\pkg\mod

@@ -9,7 +9,8 @@
     ArrowRight,
     CheckCircle2,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    Loader2
   } from '@lucide/svelte';
   import AppIcon from './AppIcon.svelte';
   import SkeletonLoader from './SkeletonLoader.svelte';
@@ -23,9 +24,10 @@
   } from '../../wailsjs/go/main/App.js';
   import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime.js';
 
-  export let onStartJob = (jobId, title) => {};
+  export let onStartJob = (jobId, title, options = {}) => {};
   export let onShowToast = (type, title, msg) => {};
   export let onUpdateCount = (count) => {};
+  export let runningJobs = {};
 
   let updates = [];
   let ignoredApps = [];
@@ -43,8 +45,33 @@
       }
     });
 
+    // Listen for job completion to refresh updates list automatically
+    EventsOn('job:done', async (data) => {
+      if (data && data.success) {
+        if (runningJobs['all'] === 'upgrade') {
+          updates = [];
+          onUpdateCount(0);
+        } else {
+          for (const [pkgId, action] of Object.entries(runningJobs)) {
+            if (action === 'upgrade') {
+              updates = updates.filter(u => (u.id || '').toLowerCase() !== pkgId.toLowerCase());
+              onUpdateCount(updates.length);
+            }
+          }
+        }
+        try {
+          const upList = await GetUpdates(false);
+          if (upList && Array.isArray(upList)) {
+            updates = upList;
+            onUpdateCount(updates.length);
+          }
+        } catch (e) {}
+      }
+    });
+
     return () => {
       EventsOff('updates:updated');
+      EventsOff('job:done');
     };
   });
 
@@ -72,7 +99,7 @@
   async function handleUpgrade(app) {
     try {
       const jobId = await UpgradePackage(app.id);
-      onStartJob(jobId, `Upgrading ${app.name}`);
+      onStartJob(jobId, `Upgrading ${app.name}`, { packageId: app.id, action: 'upgrade' });
       onShowToast('info', 'Update Started', `Updating ${app.name}...`);
     } catch (err) {
       onShowToast('error', 'Update Failed', String(err));
@@ -83,7 +110,7 @@
     if (updates.length === 0) return;
     try {
       const jobId = await UpgradeAll();
-      onStartJob(jobId, 'Upgrading All Outdated Packages');
+      onStartJob(jobId, 'Upgrading All Outdated Packages', { packageId: 'all', action: 'upgrade' });
       onShowToast('info', 'Batch Update Started', 'Updating all available applications...');
     } catch (err) {
       onShowToast('error', 'Batch Update Failed', String(err));
@@ -123,10 +150,15 @@
       <div class="header-actions">
         <button 
           class="btn-primary" 
+          class:btn-busy={runningJobs['all'] === 'upgrade'}
           on:click={handleUpgradeAll} 
-          disabled={isLoading || updates.length === 0}
+          disabled={isLoading || updates.length === 0 || runningJobs['all'] === 'upgrade'}
         >
-          <CheckCheck size={15} /> Update All ({updates.length})
+          {#if runningJobs['all'] === 'upgrade'}
+            <Loader2 size={15} class="animate-spin" /> Upgrading All...
+          {:else}
+            <CheckCheck size={15} /> Update All ({updates.length})
+          {/if}
         </button>
         <button 
           class="btn-secondary" 
@@ -150,7 +182,8 @@
       </div>
     {:else}
       <div class="updates-list">
-        {#each updates as app (app.id)}
+        {#each updates as app, index (app.id ? `${app.id}__${index}` : `upd__${index}`)}
+          {@const appKey = (app.id || '').toLowerCase()}
           <div class="update-card">
             <AppIcon packageId={app.id} name={app.name} size={46} />
 
@@ -166,13 +199,20 @@
             </div>
 
             <div class="update-actions">
-              <button class="btn-primary" on:click={() => handleUpgrade(app)}>
-                <ArrowUpCircle size={16} /> Update
-              </button>
+              {#if runningJobs[appKey] === 'upgrade' || runningJobs['all'] === 'upgrade'}
+                <button class="btn-primary btn-busy" disabled>
+                  <Loader2 size={16} class="animate-spin" /> Upgrading...
+                </button>
+              {:else}
+                <button class="btn-primary" on:click={() => handleUpgrade(app)}>
+                  <ArrowUpCircle size={16} /> Update
+                </button>
+              {/if}
               <button 
                 class="btn-ghost" 
                 title="Ignore this update" 
                 on:click={() => handleIgnore(app)}
+                disabled={runningJobs[appKey] === 'upgrade' || runningJobs['all'] === 'upgrade'}
               >
                 <EyeOff size={15} />
               </button>
@@ -207,7 +247,7 @@
         {#if showIgnored}
           <div class="ignored-list-container">
             <div class="ignored-list">
-              {#each ignoredApps as app (app.id)}
+              {#each ignoredApps as app, index (app.id ? `${app.id}__${index}` : `ign__${index}`)}
                 <div class="ignored-app-row">
                   <div class="ignored-left">
                     <AppIcon packageId={app.id} name={app.name} size={36} />

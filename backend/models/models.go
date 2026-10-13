@@ -75,3 +75,15 @@ type ManifestIcon struct {
 	URL     string `json:"url"`
 	IconURL string `json:"iconUrl"`
 }
+
+// AppUpdateInfo represents EasyWinGet application release update info
+type AppUpdateInfo struct {
+	HasUpdate      bool   `json:"hasUpdate"`
+	CurrentVersion string `json:"currentVersion"`
+	LatestVersion  string `json:"latestVersion"`
+	ReleaseName    string `json:"releaseName"`
+	ReleaseNotes   string `json:"releaseNotes"`
+	ReleaseURL     string `json:"releaseUrl"`
+	DownloadURL    string `json:"downloadUrl"`
+	PublishedAt    string `json:"publishedAt"`
+}

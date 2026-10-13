@@ -7,7 +7,8 @@
     Trash2, 
     Search, 
     FileSpreadsheet,
-    X
+    X,
+    Loader2
   } from '@lucide/svelte';
   import AppIcon from './AppIcon.svelte';
   import SkeletonLoader from './SkeletonLoader.svelte';
@@ -19,14 +20,16 @@
   } from '../../wailsjs/go/main/App.js';
   import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime.js';
 
-  export let onStartJob = (jobId, title) => {};
+  export let onStartJob = (jobId, title, options = {}) => {};
   export let onShowToast = (type, title, msg) => {};
   export let onUpdateCount = (count) => {};
   export let onConfirmRequest = async (opts) => true;
+  export let runningJobs = {};
 
   let installedApps = [];
   let isLoading = false;
   let filterText = '';
+  let searchInputRef;
 
   $: cleanFilter = (filterText || '').trim().toLowerCase();
 
@@ -40,10 +43,23 @@
 
   function clearFilter() {
     filterText = '';
+    if (searchInputRef) {
+      searchInputRef.value = '';
+      searchInputRef.focus();
+    }
   }
 
   function handleFilterKeydown(e) {
     if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      clearFilter();
+    }
+  }
+
+  function handleGlobalKeydown(e) {
+    if (e.key === 'Escape' && filterText) {
+      e.preventDefault();
       clearFilter();
     }
   }
@@ -59,8 +75,31 @@
       }
     });
 
+    // Listen for job completion to refresh installed apps automatically
+    EventsOn('job:done', async (data) => {
+      if (data && data.success) {
+        for (const [pkgId, action] of Object.entries(runningJobs)) {
+          if (action === 'uninstall') {
+            installedApps = installedApps.filter(a => 
+              (a.id || '').toLowerCase() !== pkgId.toLowerCase() && 
+              (a.name || '').toLowerCase() !== pkgId.toLowerCase()
+            );
+            onUpdateCount(installedApps.length);
+          }
+        }
+        try {
+          const apps = await GetInstalled(false);
+          if (apps && Array.isArray(apps)) {
+            installedApps = apps;
+            onUpdateCount(installedApps.length);
+          }
+        } catch (e) {}
+      }
+    });
+
     return () => {
       EventsOff('installed:updated');
+      EventsOff('job:done');
     };
   });
 
@@ -95,7 +134,7 @@
 
     try {
       const jobId = await UninstallPackage(app.id, app.name, false);
-      onStartJob(jobId, `Uninstalling ${app.name}`);
+      onStartJob(jobId, `Uninstalling ${app.name}`, { packageId: app.id, action: 'uninstall' });
       onShowToast('info', 'Uninstall Started', `Uninstalling ${app.name}...`);
     } catch (err) {
       onShowToast('error', 'Uninstall Failed', String(err));
@@ -113,6 +152,8 @@
     }
   }
 </script>
+
+<svelte:window on:keydown={handleGlobalKeydown} />
 
 <div class="installed-page view-animated">
   <!-- Pinned / Sticky Top Zone: Header + Search Filter Bar -->
@@ -137,6 +178,7 @@
       <div class="search-input-wrap">
         <Search size={16} class="search-icon" />
         <input 
+          bind:this={searchInputRef}
           type="text" 
           placeholder="Filter installed apps by name or ID... (Esc to clear)"
           bind:value={filterText}
@@ -174,7 +216,8 @@
       </div>
     {:else}
       <div class="apps-list">
-        {#each filteredApps as app (app.id)}
+        {#each filteredApps as app, index (app.id ? `${app.id}__${app.version || ''}__${index}` : `app__${index}`)}
+          {@const appKey = (app.id || '').toLowerCase()}
           <div class="app-row">
             <AppIcon packageId={app.id} name={app.name} size={44} />
             
@@ -189,13 +232,23 @@
             </div>
 
             <div class="app-actions">
-              <button 
-                class="btn-danger" 
-                title="Uninstall {app.name}"
-                on:click={() => handleUninstall(app)}
-              >
-                <Trash2 size={15} /> Uninstall
-              </button>
+              {#if runningJobs[appKey] === 'uninstall'}
+                <button 
+                  class="btn-danger btn-busy" 
+                  title="Uninstalling {app.name}..."
+                  disabled
+                >
+                  <Loader2 size={15} class="animate-spin" /> Uninstalling...
+                </button>
+              {:else}
+                <button 
+                  class="btn-danger" 
+                  title="Uninstall {app.name}"
+                  on:click={() => handleUninstall(app)}
+                >
+                  <Trash2 size={15} /> Uninstall
+                </button>
+              {/if}
             </div>
           </div>
         {/each}

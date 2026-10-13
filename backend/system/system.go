@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -84,8 +85,137 @@ func SetAutoStart(enable bool) error {
 	return nil
 }
 
-// GetEasyWinGetDownloadDir returns %USERPROFILE%\Downloads\EasyWinGet
+var (
+	isPortableInit   sync.Once
+	isPortableCached bool
+)
+
+// IsPortableMode returns true if EasyWinGet is running in portable mode.
+// Portable mode is detected if:
+// 1. A marker file ('portable', '.portable', or 'portable.dat') exists next to EasyWinGet.exe
+// 2. The executable filename contains 'portable' (e.g. EasyWinGet-portable.exe)
+// 3. The --portable flag or EASYWINGET_PORTABLE=1 environment variable is set
+// If running from inside Program Files, it always uses installed mode to avoid UAC write issues.
+func IsPortableMode() bool {
+	isPortableInit.Do(func() {
+		exePath, err := os.Executable()
+		if err != nil {
+			isPortableCached = false
+			return
+		}
+		exeDir := filepath.Dir(exePath)
+		lowDir := strings.ToLower(exeDir)
+
+		// Hard safety guard: Never use portable mode if installed under Program Files
+		if strings.Contains(lowDir, "program files") || strings.Contains(lowDir, `\windows\`) || strings.Contains(lowDir, `appdata\local\programs`) {
+			isPortableCached = false
+			return
+		}
+
+		// 1. Check CLI args
+		for _, arg := range os.Args {
+			if strings.EqualFold(arg, "--portable") || strings.EqualFold(arg, "-portable") {
+				isPortableCached = true
+				return
+			}
+		}
+
+		// 2. Check environment variable
+		if os.Getenv("EASYWINGET_PORTABLE") == "1" {
+			isPortableCached = true
+			return
+		}
+
+		// 3. Check executable name (e.g. EasyWinGet-portable.exe)
+		exeName := strings.ToLower(filepath.Base(exePath))
+		if strings.Contains(exeName, "portable") {
+			isPortableCached = true
+			return
+		}
+
+		// 4. Check marker files in executable folder
+		markers := []string{"portable", ".portable", "portable.dat", "portable.ini", "portable.txt"}
+		for _, m := range markers {
+			if _, err := os.Stat(filepath.Join(exeDir, m)); err == nil {
+				isPortableCached = true
+				return
+			}
+		}
+
+		isPortableCached = false
+	})
+	return isPortableCached
+}
+
+// GetEasyWinGetAppDataRoot returns the root app data folder.
+// In portable mode: returns the executable directory.
+// In installed mode: returns %LOCALAPPDATA%\EasyWinGet.
+func GetEasyWinGetAppDataRoot() string {
+	if IsPortableMode() {
+		if exePath, err := os.Executable(); err == nil {
+			return filepath.Dir(exePath)
+		}
+	}
+	appData := os.Getenv("LOCALAPPDATA")
+	if appData == "" {
+		appData = os.Getenv("APPDATA")
+	}
+	if appData == "" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			appData = home
+		} else {
+			appData = "."
+		}
+	}
+	dir := filepath.Join(appData, "EasyWinGet")
+	_ = os.MkdirAll(dir, 0755)
+	return dir
+}
+
+// GetEasyWinGetDataDir returns the data directory for SQLite database and icons.
+// In portable mode: returns <ExeDir>\data.
+// In installed mode: returns %LOCALAPPDATA%\EasyWinGet\data.
+func GetEasyWinGetDataDir() string {
+	if IsPortableMode() {
+		if exePath, err := os.Executable(); err == nil {
+			dir := filepath.Join(filepath.Dir(exePath), "data")
+			_ = os.MkdirAll(dir, 0755)
+			return dir
+		}
+	}
+	dir := filepath.Join(GetEasyWinGetAppDataRoot(), "data")
+	_ = os.MkdirAll(dir, 0755)
+	return dir
+}
+
+// GetEasyWinGetJobsDir returns the directory for real-time background job logs.
+// In portable mode: returns <ExeDir>\jobs.
+// In installed mode: returns %LOCALAPPDATA%\EasyWinGet\jobs.
+func GetEasyWinGetJobsDir() string {
+	if IsPortableMode() {
+		if exePath, err := os.Executable(); err == nil {
+			dir := filepath.Join(filepath.Dir(exePath), "jobs")
+			_ = os.MkdirAll(dir, 0755)
+			return dir
+		}
+	}
+	dir := filepath.Join(GetEasyWinGetAppDataRoot(), "jobs")
+	_ = os.MkdirAll(dir, 0755)
+	return dir
+}
+
+// GetEasyWinGetDownloadDir returns the directory for downloaded installer packages.
+// In portable mode: returns <ExeDir>\downloads.
+// In installed mode: returns %USERPROFILE%\Downloads\EasyWinGet.
 func GetEasyWinGetDownloadDir() string {
+	if IsPortableMode() {
+		if exePath, err := os.Executable(); err == nil {
+			dir := filepath.Join(filepath.Dir(exePath), "downloads")
+			_ = os.MkdirAll(dir, 0755)
+			return dir
+		}
+	}
 	userProfile := os.Getenv("USERPROFILE")
 	if userProfile == "" {
 		home, err := os.UserHomeDir()
@@ -98,6 +228,25 @@ func GetEasyWinGetDownloadDir() string {
 	dir := filepath.Join(userProfile, "Downloads", "EasyWinGet")
 	_ = os.MkdirAll(dir, 0755)
 	return dir
+}
+
+// CleanupProgramFilesJunk cleans up obsolete 'app', 'jobs', and 'data' directories from Program Files.
+// In portable mode, this is a no-op to protect local data.
+func CleanupProgramFilesJunk() {
+	if IsPortableMode() {
+		return
+	}
+	exePath, err := os.Executable()
+	if err != nil {
+		return
+	}
+	exeDir := filepath.Dir(exePath)
+	low := strings.ToLower(exeDir)
+	if strings.Contains(low, "program files") || strings.Contains(low, "programs") {
+		_ = os.RemoveAll(filepath.Join(exeDir, "app"))
+		_ = os.RemoveAll(filepath.Join(exeDir, "jobs"))
+		_ = os.RemoveAll(filepath.Join(exeDir, "data"))
+	}
 }
 
 // CheckInternetConnection tests if there is an active internet connection
@@ -271,6 +420,20 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($doc)
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000} // CREATE_NO_WINDOW
 	_ = cmd.Run()
+}
+
+// AllowUIPIMessages permits lower-integrity processes (such as standard-user taskbar shortcut clicks)
+// to send WM_COPYDATA through Windows UIPI even if EasyWinGet is running elevated as Administrator.
+func AllowUIPIMessages() {
+	user32 := syscall.NewLazyDLL("user32.dll")
+	procChangeWindowMessageFilter := user32.NewProc("ChangeWindowMessageFilter")
+	if procChangeWindowMessageFilter.Find() == nil {
+		const (
+			WM_COPYDATA = 0x004A
+			MSGFLT_ADD  = 1
+		)
+		procChangeWindowMessageFilter.Call(uintptr(WM_COPYDATA), uintptr(MSGFLT_ADD))
+	}
 }
 
 
