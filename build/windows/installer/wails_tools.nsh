@@ -207,8 +207,10 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
     InitPluginsDir
     CreateDirectory "$pluginsdir\webview2bootstrapper"
     SetOutPath "$pluginsdir\webview2bootstrapper"
-    File "tmp\MicrosoftEdgeWebview2Setup.exe"
+    File /nonfatal "tmp\MicrosoftEdgeWebview2Setup.exe"
+    IfFileExists "$pluginsdir\webview2bootstrapper\MicrosoftEdgeWebview2Setup.exe" 0 skip_wv2
     ExecWait '"$pluginsdir\webview2bootstrapper\MicrosoftEdgeWebview2Setup.exe" /silent /install'
+    skip_wv2:
 
     SetDetailsPrint both
     ok:
