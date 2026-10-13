@@ -12,8 +12,8 @@
 
   export let updateInfo = {
     hasUpdate: false,
-    currentVersion: '4.0.0',
-    latestVersion: '4.0.0',
+    currentVersion: '5.0.0',
+    latestVersion: '5.0.0',
     releaseName: '',
     releaseNotes: '',
     releaseUrl: '',
@@ -77,7 +77,7 @@
     <div class="version-banner">
       <div class="version-pill current">
         <span class="version-label">Current Version</span>
-        <span class="version-value">v{updateInfo?.currentVersion || '4.0.0'}</span>
+        <span class="version-value">v{updateInfo?.currentVersion || '5.0.0'}</span>
       </div>
 
       <div class="version-arrow">

@@ -17,7 +17,7 @@
   export let downloadsCount = 0;
   export let searchCount = null;
   export let isJobRunning = false;
-  export let version = '4.0.0';
+  export let version = '5.0.0';
 </script>
 
 <aside class="sidebar">

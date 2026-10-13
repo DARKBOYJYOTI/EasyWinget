@@ -25,7 +25,7 @@
   import { BrowserOpenURL } from '../../wailsjs/runtime/runtime.js';
   import { OpenURLInDefaultBrowser, IsPortableMode } from '../../wailsjs/go/main/App.js';
 
-  export let version = '4.0.0';
+  export let version = '5.0.0';
   export let onShowToast = (type, title, msg) => {};
 
   let activeSection = 'guide'; // 'guide' | 'tos' | 'privacy' | 'diagnostics'

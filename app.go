@@ -61,7 +61,7 @@ func NewApp() *App {
 		iconManager:       im,
 		downManager:       dm,
 		dataDir:           dataDir,
-		version:           "4.0.0",
+		version:           "5.0.0",
 		initialTab:        "",
 		updateTriggerChan: make(chan struct{}, 1),
 	}

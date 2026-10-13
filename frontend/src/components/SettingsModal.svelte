@@ -29,7 +29,7 @@
     ApplyAutoUpdateSettings
   } from '../../wailsjs/go/main/App.js';
 
-  export let version = '4.0.0';
+  export let version = '5.0.0';
   export let themePreference = 'dark'; // 'dark' | 'light' | 'auto'
   export let currentTheme = 'dark';
   export let accentColor = '#0078d4';

@@ -75,7 +75,7 @@
   }
 
   let installedIds = new Set();
-  let appVersion = '4.0.0';
+  let appVersion = '5.0.0';
 
   let activeJob = null; // { id, title, packageId, action }
   let isJobRunning = false;

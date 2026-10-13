@@ -21,7 +21,7 @@ Unicode true
 !define INFO_PROJECTNAME    "EasyWinGet"
 !define INFO_COMPANYNAME    "DARKBOYJYOTI"
 !define INFO_PRODUCTNAME    "EasyWinGet"
-!define INFO_PRODUCTVERSION "4.0.0"
+!define INFO_PRODUCTVERSION "5.0.0"
 !define INFO_COPYRIGHT      "Copyright © 2026 DARKBOYJYOTI"
 
 !define UNINST_KEY_NAME "EasyWinGet"
