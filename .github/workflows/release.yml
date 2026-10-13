@@ -66,10 +66,14 @@ jobs:
           New-Item -ItemType File -Force -Path "$portableDir\portable" | Out-Null
           Compress-Archive -Path "$portableDir\*" -DestinationPath "build\bin\EasyWinGet-portable.zip" -Force
 
+      - name: Prepare Standalone Executable
+        run: |
+          Copy-Item "build\bin\EasyWinGet.exe" -Destination "build\bin\EasyWinGet-standalone.exe" -Force
+
       - name: Compute SHA-256 Checksums
         working-directory: build/bin
         run: |
-          Get-FileHash -Algorithm SHA256 "EasyWinGet-amd64-installer.exe", "EasyWinGet-portable.zip", "EasyWinGet.exe" | 
+          Get-FileHash -Algorithm SHA256 "EasyWinGet-amd64-installer.exe", "EasyWinGet-portable.zip", "EasyWinGet-standalone.exe" | 
             ForEach-Object { "$($_.Hash.ToLower())  $($_.Path | Split-Path -Leaf)" } | 
             Out-File -Encoding utf8 "checksums-sha256.txt"
           Get-Content "checksums-sha256.txt"
@@ -82,7 +86,7 @@ jobs:
           files: |
             build/bin/EasyWinGet-amd64-installer.exe
             build/bin/EasyWinGet-portable.zip
-            build/bin/EasyWinGet.exe
+            build/bin/EasyWinGet-standalone.exe
             build/bin/checksums-sha256.txt
           generate_release_notes: true
           draft: false
