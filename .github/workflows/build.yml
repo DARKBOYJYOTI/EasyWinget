@@ -45,35 +45,27 @@ jobs:
           $makensis = if (Get-Command makensis -ErrorAction SilentlyContinue) { "makensis" } else { "C:\Program Files (x86)\NSIS\makensis.exe" }
           & $makensis /DARG_WAILS_AMD64_BINARY=..\..\bin\EasyWinGet.exe build\windows\installer\project.nsi
 
-      - name: Package Portable Edition ZIP
+      - name: Package Release Executables
         run: |
-          $portableDir = "build\bin\EasyWinGet-portable"
-          New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
-          New-Item -ItemType Directory -Force -Path "$portableDir\data" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$portableDir\downloads" | Out-Null
-          Copy-Item "build\bin\EasyWinGet.exe" -Destination "$portableDir\EasyWinGet.exe" -Force
-          New-Item -ItemType File -Force -Path "$portableDir\portable" | Out-Null
-          Compress-Archive -Path "$portableDir\*" -DestinationPath "build\bin\EasyWinGet-portable.zip" -Force
-
-      - name: Prepare Standalone Executable
-        run: |
+          Copy-Item "build\bin\EasyWinGet-amd64-installer.exe" -Destination "build\bin\EasyWinGet-setup.exe" -Force
           Copy-Item "build\bin\EasyWinGet.exe" -Destination "build\bin\EasyWinGet-standalone.exe" -Force
+          Copy-Item "build\bin\EasyWinGet.exe" -Destination "build\bin\EasyWinGet-portable.exe" -Force
 
-      - name: Upload Installer Artifact
+      - name: Upload Setup Installer Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: EasyWinGet-Installer
-          path: build/bin/EasyWinGet-amd64-installer.exe
+          name: EasyWinGet-Setup
+          path: build/bin/EasyWinGet-setup.exe
           if-no-files-found: error
 
-      - name: Upload Portable Edition Artifact
+      - name: Upload Portable Artifact
         uses: actions/upload-artifact@v4
         with:
           name: EasyWinGet-Portable
-          path: build/bin/EasyWinGet-portable.zip
+          path: build/bin/EasyWinGet-portable.exe
           if-no-files-found: error
 
-      - name: Upload Standalone Binary Artifact
+      - name: Upload Standalone Artifact
         uses: actions/upload-artifact@v4
         with:
           name: EasyWinGet-Standalone

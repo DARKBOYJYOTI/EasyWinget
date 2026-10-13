@@ -56,24 +56,16 @@ jobs:
           $makensis = if (Get-Command makensis -ErrorAction SilentlyContinue) { "makensis" } else { "C:\Program Files (x86)\NSIS\makensis.exe" }
           & $makensis /DARG_WAILS_AMD64_BINARY=..\..\bin\EasyWinGet.exe build\windows\installer\project.nsi
 
-      - name: Package Portable Edition ZIP
+      - name: Package Release Executables
         run: |
-          $portableDir = "build\bin\EasyWinGet-portable"
-          New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
-          New-Item -ItemType Directory -Force -Path "$portableDir\data" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$portableDir\downloads" | Out-Null
-          Copy-Item "build\bin\EasyWinGet.exe" -Destination "$portableDir\EasyWinGet.exe" -Force
-          New-Item -ItemType File -Force -Path "$portableDir\portable" | Out-Null
-          Compress-Archive -Path "$portableDir\*" -DestinationPath "build\bin\EasyWinGet-portable.zip" -Force
-
-      - name: Prepare Standalone Executable
-        run: |
+          Copy-Item "build\bin\EasyWinGet-amd64-installer.exe" -Destination "build\bin\EasyWinGet-setup.exe" -Force
           Copy-Item "build\bin\EasyWinGet.exe" -Destination "build\bin\EasyWinGet-standalone.exe" -Force
+          Copy-Item "build\bin\EasyWinGet.exe" -Destination "build\bin\EasyWinGet-portable.exe" -Force
 
       - name: Compute SHA-256 Checksums
         working-directory: build/bin
         run: |
-          Get-FileHash -Algorithm SHA256 "EasyWinGet-amd64-installer.exe", "EasyWinGet-portable.zip", "EasyWinGet-standalone.exe" | 
+          Get-FileHash -Algorithm SHA256 "EasyWinGet-setup.exe", "EasyWinGet-portable.exe", "EasyWinGet-standalone.exe" | 
             ForEach-Object { "$($_.Hash.ToLower())  $($_.Path | Split-Path -Leaf)" } | 
             Out-File -Encoding utf8 "checksums-sha256.txt"
           Get-Content "checksums-sha256.txt"
@@ -84,8 +76,8 @@ jobs:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           name: EasyWinGet ${{ github.event.inputs.tag_name || github.ref_name }}
           files: |
-            build/bin/EasyWinGet-amd64-installer.exe
-            build/bin/EasyWinGet-portable.zip
+            build/bin/EasyWinGet-setup.exe
+            build/bin/EasyWinGet-portable.exe
             build/bin/EasyWinGet-standalone.exe
             build/bin/checksums-sha256.txt
           generate_release_notes: true
