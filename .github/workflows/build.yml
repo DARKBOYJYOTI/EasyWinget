@@ -55,10 +55,6 @@ jobs:
           New-Item -ItemType File -Force -Path "$portableDir\portable" | Out-Null
           Compress-Archive -Path "$portableDir\*" -DestinationPath "build\bin\EasyWinGet-portable.zip" -Force
 
-      - name: Package Standalone ZIP
-        run: |
-          Compress-Archive -Path "build\bin\EasyWinGet.exe" -DestinationPath "build\bin\EasyWinGet-standalone.zip" -Force
-
       - name: Upload Installer Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -73,10 +69,10 @@ jobs:
           path: build/bin/EasyWinGet-portable.zip
           if-no-files-found: error
 
-      - name: Upload Standalone ZIP Artifact
+      - name: Upload Standalone Binary Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: EasyWinGet-Standalone-Zip
-          path: build/bin/EasyWinGet-standalone.zip
+          name: EasyWinGet-Standalone
+          path: build/bin/EasyWinGet.exe
           if-no-files-found: error
 
