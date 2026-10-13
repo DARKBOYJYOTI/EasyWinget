@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![EasyWinGet Banner](frontend/src/assets/logo.png)
+![EasyWinGet Banner](assets/banner.png)
 
 **Next-Generation Native Windows Package Management Hub**  
 *Ultra-fast, lightweight, modern desktop GUI for Windows Package Manager (`winget`).*  
